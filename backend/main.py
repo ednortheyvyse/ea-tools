@@ -84,7 +84,15 @@ def parse_mxf():
             filepath = f"/tmp/{file.filename}"
             file.save(filepath)
 
-            ffprobe_path = os.getenv("FFPROBE_PATH", "ffprobe")
+            # Try to find ffprobe - works for both Mac dev and Linux containers
+            ffprobe_path = os.getenv("FFPROBE_PATH")
+            if not ffprobe_path:
+                # Try common paths
+                import shutil
+                ffprobe_path = shutil.which("ffprobe")
+                if not ffprobe_path:
+                    # Fallback to Mac homebrew path for local development
+                    ffprobe_path = "/opt/homebrew/bin/ffprobe" if os.path.exists("/opt/homebrew/bin/ffprobe") else "ffprobe"
 
             ffprobe_cmd = [
                 ffprobe_path,
@@ -146,19 +154,41 @@ def parse_mxf():
                 except (ValueError, TypeError):
                     return None
 
+            def format_aspect_ratio(aspect_str):
+                """Convert aspect ratio from '256:135' format to '1.896:1' format"""
+                if not aspect_str or aspect_str == 'N/A':
+                    return None
+                try:
+                    if ':' in aspect_str:
+                        parts = aspect_str.split(':')
+                        width = float(parts[0])
+                        height = float(parts[1])
+                        if height > 0:
+                            ratio = width / height
+                            return f"{ratio:.3f}:1"
+                    return aspect_str
+                except (ValueError, IndexError, ZeroDivisionError):
+                    return aspect_str
+
 
             # 2. Create the structured summary
             output = {}
-            
+
             # 3. Top-level summary
             format_info = raw_data.get('format', {})
+            tags = format_info.get('tags', {})
             output['summary'] = {
                 'File Name': os.path.basename(format_info.get('filename')),
                 'Format': format_info.get('format_long_name'),
                 'Duration': format_duration(format_info.get('duration')),
-                'Size': format_size(format_info.get('size')),
+                'File Size': format_size(format_info.get('size')),
                 'Overall Bit Rate': format_bitrate(format_info.get('bit_rate')),
-                'Stream Count': format_info.get('nb_streams')
+                'Stream Count': format_info.get('nb_streams'),
+                'company_name': tags.get('company_name'),
+                'product_name': tags.get('product_name'),
+                'product_version': tags.get('product_version'),
+                'product_uid': tags.get('uid'),
+                'project_name': tags.get('project_name'),
             }
 
             # 4. Group streams
@@ -174,7 +204,7 @@ def parse_mxf():
                         'Stream Index': stream.get('index'),
                         'Codec': stream.get('codec_long_name'),
                         'Resolution': f"{stream.get('width')}x{stream.get('height')}",
-                        'Aspect Ratio': stream.get('display_aspect_ratio'),
+                        'Aspect Ratio': format_aspect_ratio(stream.get('display_aspect_ratio')),
                         'Frame Rate': stream.get('avg_frame_rate'),
                         'Bit Rate': format_bitrate(stream.get('bit_rate')),
                         'Pixel Format': stream.get('pix_fmt'),

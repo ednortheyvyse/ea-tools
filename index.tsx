@@ -999,7 +999,7 @@ const DownloadRawJSONButton: React.FC<{ data: any, filename: string }> = ({ data
     );
 };
 
-const RecursiveTable: React.FC<{ data: any }> = ({ data }) => {
+function RecursiveTable({ data }: { data: any }): React.ReactElement {
     // For primitive values, just display them as strings.
     if (typeof data !== 'object' || data === null) {
         return <span className="text-gray-800 font-mono whitespace-pre-wrap break-all">{String(data)}</span>;
@@ -1039,7 +1039,7 @@ const RecursiveTable: React.FC<{ data: any }> = ({ data }) => {
             })}
         </div>
     );
-};
+}
 
 const CollapsibleSection: React.FC<{ title: string, children: React.ReactNode, defaultOpen?: boolean }> = ({ title, children, defaultOpen = false }) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -1110,9 +1110,43 @@ const StreamsTable: React.FC<{ title: string, streams: any[] }> = ({ title, stre
 const SummaryTable: React.FC<{ summary: any }> = ({ summary }) => {
     if (!summary) return null;
 
+    // Mapping from desired human-readable label to the key in the summary object
+    const summaryFields = {
+        "Company Name": "company_name",
+        "Product Name": "product_name",
+        "Product UID": "product_uid",
+        "Product Version": "product_version",
+        "Project Name": "project_name",
+        "File Name": "File Name",
+        "Format": "Format",
+        "File Size": "File Size",
+        "Duration": "Duration",
+    };
+
+    // Filter out fields that don't exist in the summary
+    const availableDetails = Object.entries(summaryFields)
+        .map(([label, key]) => ({ label, value: summary[key] }))
+        .filter(item => item.value !== undefined && item.value !== null);
+
+    if (availableDetails.length === 0) {
+        // Fallback for safety, though the user wants specific fields.
+        return (
+            <CollapsibleSection title="File Summary" defaultOpen={true}>
+                <RecursiveTable data={summary} />
+            </CollapsibleSection>
+        );
+    }
+
     return (
         <CollapsibleSection title="File Summary" defaultOpen={true}>
-            <RecursiveTable data={summary} />
+            <div className="w-full text-sm space-y-3">
+                {availableDetails.map(({ label, value }) => (
+                    <div key={label} className="grid grid-cols-12 gap-4 items-start">
+                        <div className="col-span-4 font-semibold text-gray-500 break-words">{label}</div>
+                        <div className="col-span-8 text-gray-800 font-mono whitespace-pre-wrap break-all bg-gray-50 p-2 rounded-md">{String(value)}</div>
+                    </div>
+                ))}
+            </div>
         </CollapsibleSection>
     );
 };
