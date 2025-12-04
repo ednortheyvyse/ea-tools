@@ -153,7 +153,7 @@ def parse_mxf():
             # 3. Top-level summary
             format_info = raw_data.get('format', {})
             output['summary'] = {
-                'File Name': format_info.get('filename'),
+                'File Name': os.path.basename(format_info.get('filename')),
                 'Format': format_info.get('format_long_name'),
                 'Duration': format_duration(format_info.get('duration')),
                 'Size': format_size(format_info.get('size')),
