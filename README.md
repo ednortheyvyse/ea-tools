@@ -2,8 +2,6 @@
 
 A suite of offline-first utilities designed for the modern Assistant Editor. Simple, fast, and secure.
 
-🔗 **Live:** [eatools.edvyse.co.uk](https://eatools.edvyse.co.uk)
-
 ## Features
 
 - **Timecode Calculator** - Add, subtract, and convert timecodes
