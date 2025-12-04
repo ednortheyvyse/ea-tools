@@ -1107,6 +1107,16 @@ const StreamsTable: React.FC<{ title: string, streams: any[] }> = ({ title, stre
     );
 };
 
+const SummaryTable: React.FC<{ summary: any }> = ({ summary }) => {
+    if (!summary) return null;
+
+    return (
+        <CollapsibleSection title="File Summary" defaultOpen={true}>
+            <RecursiveTable data={summary} />
+        </CollapsibleSection>
+    );
+};
+
 const MXFInspector = () => {
     const [dragActive, setDragActive] = useState(false);
     const [loading, setLoading] = useState(false);
