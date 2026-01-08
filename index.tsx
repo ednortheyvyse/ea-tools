@@ -25,9 +25,7 @@ import {
 
 // --- Types & Constants ---
 
-type FrameRate = 23.976 | 24 | 25 | 29.97 | 30 | 50 | 59.94 | 60;
-
-const FRAME_RATES: FrameRate[] = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
+const FRAME_RATES: number[] = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60];
 
 const RESOLUTIONS = [
   { name: "SD (NTSC)", w: 720, h: 480 },
@@ -152,7 +150,7 @@ const ToolCard: React.FC<ToolCardProps> = ({
 // --- 1. Timecode Calculator ---
 
 const TimecodeCalculator = () => {
-  const [fps, setFps] = useState<FrameRate>(24);
+  const [fps, setFps] = useState<number>(24);
   const [mode, setMode] = useState<"sum" | "diff">("sum");
   const [inputs, setInputs] = useState<string[]>(["", ""]);
   const [result, setResult] = useState("00:00:00:00");
@@ -203,35 +201,44 @@ const TimecodeCalculator = () => {
     <div className="space-y-8 max-w-2xl mx-auto">
       <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
         <div className="grid grid-cols-2 gap-6">
-            <div>
-            <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Frame Rate</label>
-            <div className="relative">
-                <select
-                    value={fps}
-                    onChange={(e) => setFps(Number(e.target.value) as FrameRate)}
-                    className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 font-mono focus:ring-2 focus:ring-black focus:border-transparent outline-none appearance-none cursor-pointer"
-                >
-                    {FRAME_RATES.map((r) => (
-                    <option key={r} value={r}>{r} fps</option>
-                    ))}
-                </select>
-                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-500">
-                    <ChevronRight className="rotate-90" size={16} />
+            <div className="space-y-2">
+                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Frame Rate</label>
+                <div className="flex items-center gap-2">
+                    <select
+                        onChange={(e) => {
+                            if (e.target.value) setFps(Number(e.target.value));
+                        }}
+                        className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 text-sm focus:ring-2 focus:ring-black outline-none"
+                        value={FRAME_RATES.includes(fps) ? fps : ""}
+                    >
+                        <option value="">Custom FPS</option>
+                        {FRAME_RATES.map((r) => (
+                            <option key={r} value={r}>{r} fps</option>
+                        ))}
+                    </select>
+                    <div className="relative flex-1">
+                        <input 
+                            type="number" 
+                            value={fps} 
+                            onChange={e => setFps(Number(e.target.value))}
+                            className="w-full bg-white px-4 py-2 border border-gray-300 rounded-lg text-gray-900 font-mono text-sm focus:ring-2 focus:ring-black outline-none"
+                        />
+                        <span className="absolute right-3 top-2.5 text-xs text-gray-400 font-bold">FPS</span>
+                    </div>
                 </div>
-            </div>
             </div>
             <div>
             <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Mode</label>
             <div className="flex bg-white rounded-lg p-1 border border-gray-300">
                 <button
                 onClick={() => { setMode("sum"); setInputs(["", ""]); }}
-                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${mode === "sum" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
+                className={`flex-1 py-1 text-sm font-medium rounded-md transition-all ${mode === "sum" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
                 >
                 Add
                 </button>
                 <button
                 onClick={() => { setMode("diff"); setInputs(["", ""]); }}
-                className={`flex-1 py-1.5 text-sm font-medium rounded-md transition-all ${mode === "diff" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
+                className={`flex-1 py-1 text-sm font-medium rounded-md transition-all ${mode === "diff" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
                 >
                 Subtract
                 </button>
@@ -396,8 +403,20 @@ const SpeedCalculator = () => {
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       <div className="grid grid-cols-2 gap-8 bg-gray-50 p-8 rounded-2xl border border-gray-200">
-        <div>
+        <div className="space-y-2">
           <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Clip FPS</label>
+            <select
+                onChange={(e) => {
+                    if (e.target.value) setClipFps(Number(e.target.value));
+                }}
+                className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 text-sm focus:ring-2 focus:ring-black outline-none"
+                value={FRAME_RATES.includes(clipFps) ? clipFps : ""}
+            >
+                <option value="">Custom</option>
+                {FRAME_RATES.map((r) => (
+                    <option key={r} value={r}>{r} fps</option>
+                ))}
+            </select>
           <input 
             type="number" 
             value={clipFps} 
@@ -405,8 +424,20 @@ const SpeedCalculator = () => {
             className="w-full bg-white px-4 py-3 border border-gray-300 rounded-lg text-gray-900 font-mono text-lg focus:ring-2 focus:ring-black outline-none shadow-sm" 
           />
         </div>
-        <div>
+        <div className="space-y-2">
           <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Timeline FPS</label>
+            <select
+                onChange={(e) => {
+                    if (e.target.value) setTimelineFps(Number(e.target.value));
+                }}
+                className="w-full bg-white border border-gray-300 rounded-lg px-4 py-2.5 text-gray-900 text-sm focus:ring-2 focus:ring-black outline-none"
+                value={FRAME_RATES.includes(timelineFps) ? timelineFps : ""}
+            >
+                <option value="">Custom</option>
+                {FRAME_RATES.map((r) => (
+                    <option key={r} value={r}>{r} fps</option>
+                ))}
+            </select>
           <input 
             type="number" 
             value={timelineFps} 
@@ -711,12 +742,15 @@ const EDLHacker = () => {
   );
 };
 
-// --- 6. AVB Hacker ---
+// --- 6. AVB Inspector ---
 
-const AVBHacker = () => {
+const AVBInspector = () => {
     const [dragActive, setDragActive] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [avbData, setAvbData] = useState<any | null>(null);
+    const [viewMode, setViewMode] = useState<'human' | 'raw'>('human');
+    const [originalFile, setOriginalFile] = useState<File | null>(null);
 
     const handleFile = async (file: File) => {
         if (!file || !file.name.toLowerCase().endsWith('.avb')) {
@@ -726,6 +760,9 @@ const AVBHacker = () => {
 
         setLoading(true);
         setError(null);
+        setAvbData(null);
+        setOriginalFile(file);
+        setViewMode('human');
         const formData = new FormData();
         formData.append("file", file);
 
@@ -736,34 +773,12 @@ const AVBHacker = () => {
             });
 
             if (!response.ok) {
-                // Try to get error message from body if it's JSON
-                if (response.headers.get("Content-Type")?.includes("application/json")) {
-                    const err = await response.json();
-                    throw new Error(err.error || `HTTP error! status: ${response.status}`);
-                }
-                throw new Error(`HTTP error! status: ${response.status}`);
+                 const err = await response.json();
+                 throw new Error(err.details || err.error || `HTTP error! status: ${response.status}`);
             }
 
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            // Try to get filename from content-disposition header
-            const disposition = response.headers.get('content-disposition');
-            let filename = 'avb_export.csv';
-            if (disposition && disposition.indexOf('attachment') !== -1) {
-                const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-                const matches = filenameRegex.exec(disposition);
-                if (matches != null && matches[1]) {
-                  filename = matches[1].replace(/['"]/g, '');
-                }
-            }
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+            const data = await response.json();
+            setAvbData(data);
 
         } catch (e: any) {
             setError(e.message);
@@ -791,22 +806,100 @@ const AVBHacker = () => {
       }
     };
 
+    const resetState = () => {
+        setDragActive(false);
+        setLoading(false);
+        setError(null);
+        setAvbData(null);
+        setViewMode('human');
+        setOriginalFile(null);
+    }
+
+    const downloadCSV = async () => {
+        if (!originalFile) return;
+
+        const formData = new FormData();
+        formData.append("file", originalFile);
+
+        try {
+            const response = await fetch("/api/avb/csv", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `${originalFile.name.replace(/\.[^/.]+$/, "")}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+        } catch (e: any) {
+            setError(e.message);
+        }
+    };
+
     return (
       <div className="space-y-6 w-full h-full">
         {loading ? (
             <div className="border-2 border-dashed rounded-2xl p-12 text-center min-h-[50vh] flex flex-col items-center justify-center">
                 <Hourglass className="h-10 w-10 text-gray-600 animate-spin" />
-                <div className="text-xl font-bold mt-4 text-gray-900">Processing...</div>
-                <p className="text-gray-500 text-sm mt-2">Please wait while we generate your CSV file.</p>
+                <div className="text-xl font-bold mt-4 text-gray-900">Analyzing AVB...</div>
+                <p className="text-gray-500 text-sm mt-2">This may take a moment.</p>
             </div>
         ) : error ? (
             <div className="border-2 border-dashed border-red-500 bg-red-50 rounded-2xl p-12 text-center min-h-[50vh] flex flex-col items-center justify-center">
                 <X className="h-10 w-10 text-red-600" />
                 <div className="text-xl font-bold mt-4 text-red-900">An Error Occurred</div>
-                <p className="text-red-700 text-sm mt-2">{error}</p>
-                <button onClick={() => setError(null)} className="mt-4 bg-red-600 text-white px-6 py-3 font-bold rounded-lg hover:bg-red-700 transition inline-block">
+                <p className="text-red-700 text-sm mt-2 max-w-lg">{error}</p>
+                <button onClick={resetState} className="mt-4 bg-red-600 text-white px-6 py-3 font-bold rounded-lg hover:bg-red-700 transition inline-block">
                     Try Again
                 </button>
+            </div>
+        ) : avbData ? (
+             <div className="space-y-8">
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 flex-none rounded-xl">
+                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                    <Check size={16} className="text-black" />
+                    Analysis Complete
+                  </h3>
+                  <div className="flex gap-3">
+                    <button onClick={resetState} className="text-gray-500 hover:text-black text-sm font-medium px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors">
+                        Inspect Another
+                    </button>
+                     <button onClick={() => setViewMode(viewMode === 'raw' ? 'human' : 'raw')} className="text-white bg-black hover:bg-gray-800 text-sm font-bold px-4 py-1.5 rounded-md transition-colors flex items-center gap-2 shadow-sm">
+                        {viewMode === 'human' ? (
+                            <><Code2 size={14} /> Show Raw JSON</>
+                        ) : (
+                            <><Search size={14} /> Show Readable</>
+                        )}
+                    </button>
+                    <button onClick={downloadCSV} className="text-white bg-black hover:bg-gray-800 text-sm font-bold px-4 py-1.5 rounded-md transition-colors flex items-center gap-2 shadow-sm">
+                        <Download size={14} /> Download CSV
+                    </button>
+                    <DownloadRawJSONButton data={avbData.raw_data} filename={`${avbData.summary?.['File Name'] || 'details'}.json`} />
+                  </div>
+              </div>
+              
+              {viewMode === 'human' ? (
+                <div className="space-y-8 animate-in fade-in">
+                    <SummaryTable summary={avbData.summary} />
+                    <StreamsTable title="Mobs" streams={avbData.mobs} />
+                </div>
+              ) : (
+                <div className="p-4 border border-gray-200 rounded-xl shadow-sm bg-white overflow-x-auto animate-in fade-in">
+                    <RecursiveTable data={avbData.raw_data} topLevel={true} />
+                </div>
+              )}
+
             </div>
         ) : (
             <div 
@@ -819,7 +912,7 @@ const AVBHacker = () => {
               onDrop={handleDrop}
             >
               <div className="p-4 bg-gray-100 rounded-full mb-6">
-                   <FileText className="h-10 w-10 text-gray-600" />
+                   <FileScan className="h-10 w-10 text-gray-600" />
               </div>
               <div className="text-xl font-bold mb-4 text-gray-900">Drag & Drop AVB File</div>
               <label className="cursor-pointer mb-4 inline-block">
@@ -829,14 +922,14 @@ const AVBHacker = () => {
               
               <div className="flex flex-col gap-2 items-center">
                 <p className="text-gray-500 text-sm max-w-md">
-                    Upload an Avid Bin (<b>.avb</b>) file to convert its contents to a <b>.csv</b> file.
+                    Upload an Avid Bin (<b>.avb</b>) file to inspect its contents.
                 </p>
               </div>
             </div>
         )}
       </div>
     );
-  };
+};
 
 // --- 7. Data Rate Calculator ---
 
@@ -999,7 +1092,7 @@ const DownloadRawJSONButton: React.FC<{ data: any, filename: string }> = ({ data
     );
 };
 
-function RecursiveTable({ data }: { data: any }): React.ReactElement {
+function RecursiveTable({ data, topLevel = false }: { data: any, topLevel?: boolean }): React.ReactElement {
     // For primitive values, just display them as strings.
     if (typeof data !== 'object' || data === null) {
         return <span className="text-gray-800 font-mono whitespace-pre-wrap break-all">{String(data)}</span>;
@@ -1010,28 +1103,39 @@ function RecursiveTable({ data }: { data: any }): React.ReactElement {
         return (
             <div className="flex flex-col gap-2 pt-1">
                 {data.map((item, index) => (
-                    <div key={index} className="flex gap-2 items-start">
-                        <span className="font-mono text-gray-400">{index}:</span>
-                        <div className="flex-1">
-                           <RecursiveTable data={item} />
-                        </div>
-                    </div>
+                    <CollapsibleSection key={index} title={`Item ${index}`} defaultOpen={false}>
+                        <RecursiveTable data={item} />
+                    </CollapsibleSection>
                 ))}
             </div>
         )
     }
 
     // For objects, render key-value pairs.
+    const entries = Object.entries(data);
+    const containerClass = topLevel 
+        ? "w-full text-xs space-y-2" 
+        : "w-full text-xs space-y-2 pt-2";
+
     return (
-        <div className="w-full text-xs space-y-2">
-            {Object.entries(data).map(([key, value]) => {
-                // Prettify the key
+        <div className={containerClass}>
+            {entries.map(([key, value]) => {
                 const formattedKey = key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                 
+                const isNestable = typeof value === 'object' && value !== null && Object.keys(value).length > 0;
+
+                if (isNestable) {
+                    return (
+                        <CollapsibleSection key={key} title={formattedKey} defaultOpen={false}>
+                            <RecursiveTable data={value} />
+                        </CollapsibleSection>
+                    )
+                }
+
                 return (
-                    <div key={key} className="grid grid-cols-3 gap-2">
-                        <div className="col-span-1 font-medium text-gray-500 break-words">{formattedKey}</div>
-                        <div className="col-span-2">
+                    <div key={key} className="grid grid-cols-1 md:grid-cols-3 gap-2 items-start">
+                        <div className="md:col-span-1 font-medium text-gray-500 break-words">{formattedKey}</div>
+                        <div className="md:col-span-2">
                             <RecursiveTable data={value} />
                         </div>
                     </div>
@@ -1110,31 +1214,17 @@ const StreamsTable: React.FC<{ title: string, streams: any[] }> = ({ title, stre
 const SummaryTable: React.FC<{ summary: any }> = ({ summary }) => {
     if (!summary) return null;
 
-    // Mapping from desired human-readable label to the key in the summary object
-    const summaryFields = {
-        "Company Name": "company_name",
-        "Product Name": "product_name",
-        "Product UID": "product_uid",
-        "Product Version": "product_version",
-        "Project Name": "project_name",
-        "File Name": "File Name",
-        "Format": "Format",
-        "File Size": "File Size",
-        "Duration": "Duration",
-    };
-
-    // Filter out fields that don't exist in the summary
-    const availableDetails = Object.entries(summaryFields)
-        .map(([label, key]) => ({ label, value: summary[key] }))
-        .filter(item => item.value !== undefined && item.value !== null);
-
+    // Filter out fields that are undefined, null, or empty strings
+    const availableDetails = Object.entries(summary)
+        .map(([key, value]) => ({
+            // Create a human-readable label from the key
+            label: key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+            value
+        }))
+        .filter(item => item.value !== undefined && item.value !== null && item.value !== '');
+    
     if (availableDetails.length === 0) {
-        // Fallback for safety, though the user wants specific fields.
-        return (
-            <CollapsibleSection title="File Summary" defaultOpen={true}>
-                <RecursiveTable data={summary} />
-            </CollapsibleSection>
-        );
+        return null; // Don't render the section if there's nothing to show
     }
 
     return (
@@ -1156,7 +1246,7 @@ const MXFInspector = () => {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [mxfData, setMxfData] = useState<any | null>(null);
-    const [isRawViewOpen, setRawViewOpen] = useState(false);
+    const [viewMode, setViewMode] = useState<'human' | 'raw'>('human');
 
     const handleFile = async (file: File) => {
         if (!file || !file.name.toLowerCase().endsWith('.mxf')) {
@@ -1167,6 +1257,7 @@ const MXFInspector = () => {
         setLoading(true);
         setError(null);
         setMxfData(null);
+        setViewMode('human');
         const formData = new FormData();
         formData.append("file", file);
 
@@ -1215,6 +1306,7 @@ const MXFInspector = () => {
         setLoading(false);
         setError(null);
         setMxfData(null);
+        setViewMode('human');
     }
 
     return (
@@ -1245,25 +1337,29 @@ const MXFInspector = () => {
                     <button onClick={resetState} className="text-gray-500 hover:text-black text-sm font-medium px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors">
                         Inspect Another
                     </button>
+                     <button onClick={() => setViewMode(viewMode === 'raw' ? 'human' : 'raw')} className="text-white bg-black hover:bg-gray-800 text-sm font-bold px-4 py-1.5 rounded-md transition-colors flex items-center gap-2 shadow-sm">
+                        {viewMode === 'human' ? (
+                            <><Code2 size={14} /> Show Raw JSON</>
+                        ) : (
+                            <><Search size={14} /> Show Readable</>
+                        )}
+                    </button>
                     <DownloadRawJSONButton data={mxfData.raw_data} filename={`${mxfData.summary?.['File Name'] || 'details'}.json`} />
                   </div>
               </div>
-              <SummaryTable summary={mxfData.summary} />
-              <StreamsTable title="Video Streams" streams={mxfData.video_streams} />
-              <StreamsTable title="Audio Streams" streams={mxfData.audio_streams} />
-              <StreamsTable title="Other Streams" streams={mxfData.other_streams} />
-
-              <div className="border border-gray-200 rounded-xl shadow-sm">
-                <button onClick={() => setRawViewOpen(!isRawViewOpen)} className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100">
-                    <h4 className="text-lg font-bold text-gray-800">Show Full Raw Data</h4>
-                    <ChevronRight size={20} className={`transition-transform transform ${isRawViewOpen ? 'rotate-90' : ''}`} />
-                </button>
-                {isRawViewOpen && (
-                    <div className="p-4 border-t border-gray-200">
-                        <RecursiveTable data={mxfData.raw_data} />
-                    </div>
-                )}
-              </div>
+              
+              {viewMode === 'human' ? (
+                <div className="space-y-8 animate-in fade-in">
+                    <SummaryTable summary={mxfData.summary} />
+                    <StreamsTable title="Video Streams" streams={mxfData.video_streams} />
+                    <StreamsTable title="Audio Streams" streams={mxfData.audio_streams} />
+                    <StreamsTable title="Other Streams" streams={mxfData.other_streams} />
+                </div>
+              ) : (
+                <div className="p-4 border border-gray-200 rounded-xl shadow-sm bg-white overflow-x-auto animate-in fade-in">
+                    <RecursiveTable data={mxfData.raw_data} topLevel={true} />
+                </div>
+              )}
 
             </div>
         ) : (
@@ -1305,7 +1401,7 @@ const TOOLS = [
   { id: "speed", title: "Speed Calc", icon: Gauge, desc: "Find speed ramp % or restore footage." },
   { id: "mask", title: "Mask Gen", icon: ScanLine, desc: "Generate PNG overlays for cinema aspect ratios." },
   { id: "edl", title: "EDL Hacker", icon: FileSpreadsheet, desc: "Convert EDL to CSV for spreadsheets." },
-  { id: "avb", title: "AVB Hacker", icon: FileText, desc: "Extract data from Avid Bins (.avb)." },
+  { id: "avb", title: "AVB Inspector", icon: FileScan, desc: "Inspect the contents of an Avid Bin (.avb) file." },
   { id: "mxf", title: "MXF Inspector", icon: FileScan, desc: "Probe technical metadata of MXF files." },
   { id: "data", title: "Data Rate", icon: HardDrive, desc: "Estimate storage needs for shoots." },
   { id: "guess", title: "Dur. Guess", icon: Hourglass, desc: "How much footage fits on this drive?" },
@@ -1324,7 +1420,7 @@ const App = () => {
       case "speed": return <SpeedCalculator />;
       case "mask": return <MaskGenerator />;
       case "edl": return <EDLHacker />;
-      case "avb": return <AVBHacker />;
+      case "avb": return <AVBInspector />;
       case "mxf": return <MXFInspector />;
       case "data": return <DataRateCalculator />;
       case "guess": return <DurationGuesstimator />;

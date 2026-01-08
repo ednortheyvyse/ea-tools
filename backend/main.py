@@ -1,6 +1,8 @@
 from flask import Flask, request, jsonify, send_from_directory
 import avb
 import os
+import pycmx
+
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), '..', 'dist'))
 
@@ -45,6 +47,50 @@ def parse_avb():
             filepath = f"/tmp/{file.filename}"
             file.save(filepath)
 
+            with avb.open(filepath) as f:
+                raw_data = to_json_serializable(f.content)
+                
+                summary = {
+                    'File Name': file.filename,
+                    'Mob Count': len(raw_data.get('mobs', [])),
+                }
+
+                mobs_summary = []
+                for mob in raw_data.get('mobs', []):
+                    mobs_summary.append({
+                        'Name': mob.get('name'),
+                        'Mob ID': mob.get('mob_id'),
+                        'details': mob
+                    })
+
+                output = {
+                    "summary": summary,
+                    "mobs": mobs_summary,
+                    "raw_data": raw_data,
+                }
+                
+                return jsonify(output)
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 500
+        finally:
+            if 'filepath' in locals() and os.path.exists(filepath):
+                os.remove(filepath)
+
+@app.route("/api/avb/csv", methods=["POST"])
+def parse_avb_csv():
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
+    if file:
+        try:
+            filepath = f"/tmp/{file.filename}"
+            file.save(filepath)
+
             output = io.StringIO()
             writer = csv.writer(output)
             
@@ -52,7 +98,6 @@ def parse_avb():
 
             with avb.open(filepath) as f:
                 mobs = list(f.content.mobs)
-                print(f"Found {len(mobs)} mobs")
                 for mob in mobs:
                     writer.writerow([mob.name, str(mob.mob_id)])
 
@@ -61,7 +106,58 @@ def parse_avb():
             output.seek(0)
             return output.getvalue(), 200, {
                 "Content-Type": "text/csv",
-                "Content-Disposition": "attachment; filename=avb_export.csv"
+                "Content-Disposition": f"attachment; filename={os.path.splitext(file.filename)[0]}.csv"
+            }
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": str(e)}), 500
+
+@app.route("/api/edl", methods=["POST"])
+def parse_edl():
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
+    if file:
+        try:
+            # Read content directly from the file stream
+            file_content = file.stream.read().decode("utf-8")
+            
+            edl = pycmx.parse_cmx3600(file_content)
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Write header
+            writer.writerow(["Event", "Reel", "Track", "Trn", "Src TC In", "Src TC Out", "Rec TC In", "Rec TC Out", "Clip Name"])
+
+            # Write events
+            for event in edl.events:
+                clip_name = None
+                if event.comments:
+                    for comment in event.comments:
+                        if comment.startswith("* FROM CLIP NAME:"):
+                            clip_name = comment.split(":", 1)[1].strip()
+                
+                writer.writerow([
+                    event.number,
+                    event.source,
+                    event.track,
+                    event.transition.kind if event.transition else "C",
+                    event.source_start,
+                    event.source_end,
+                    event.record_start,
+                    event.record_end,
+                    clip_name,
+                ])
+
+            output.seek(0)
+            return output.getvalue(), 200, {
+                "Content-Type": "text/csv",
+                "Content-Disposition": "attachment; filename=edl_export.csv"
             }
 
         except Exception as e:
