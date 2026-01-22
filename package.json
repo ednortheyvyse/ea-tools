@@ -4,9 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "debug": "NODE_OPTIONS='--inspect=0.0.0.0:9229' vite --host 0.0.0.0"
   },
   "dependencies": {
     "lucide-react": "^0.555.0",

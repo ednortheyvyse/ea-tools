@@ -1,10 +1,31 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, send_file
 import avb
 import os
 import pycmx
+import pandas as pd
+from werkzeug.utils import secure_filename
+import ALE_Parser
+import io
+import csv
+import subprocess
+import json
 
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), '..', 'dist'))
+
+def convert_cr_to_lf(filepath):
+    """Converts CR-only line endings to LF."""
+    try:
+        with open(filepath, 'rb') as f:
+            content = f.read()
+        
+        # Check for files with CR but no LF, and convert them
+        if b'\r' in content and b'\n' not in content:
+            content = content.replace(b'\r', b'\n')
+            with open(filepath, 'wb') as f:
+                f.write(content)
+    except Exception as e:
+        print(f"Error converting line endings for {filepath}: {e}")
 
 def to_json_serializable(obj):
     if isinstance(obj, dict):
@@ -31,9 +52,6 @@ def to_json_serializable(obj):
         return str(obj.uuid)
     else:
         return obj
-
-import io
-import csv
 
 @app.route("/api/avb", methods=["POST"])
 def parse_avb():
@@ -164,9 +182,6 @@ def parse_edl():
             import traceback
             traceback.print_exc()
             return jsonify({"error": str(e)}), 500
-
-import subprocess
-import json
 
 @app.route("/api/mxf", methods=["POST"])
 def parse_mxf():
@@ -340,6 +355,148 @@ def parse_mxf():
             import traceback
             traceback.print_exc()
             return jsonify({"error": str(e)}), 500
+
+@app.route("/api/ale", methods=["POST"])
+def parse_ale():
+    if "file" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+    file = request.files["file"]
+    filename = file.filename
+    if filename == "":
+        return jsonify({"error": "No selected file"}), 400
+
+    check_tape_length = request.form.get("check_tape_length", "true").lower() == "true"
+
+    try:
+        if filename.lower().endswith('.ale'):
+            filepath = f"/tmp/{filename}"
+            file.save(filepath)
+            convert_cr_to_lf(filepath)
+            parsed_data = ALE_Parser.ale_read_parser(filepath, check_tape_length=check_tape_length)
+            if parsed_data[2] is None:
+                return jsonify({"error": "Invalid ALE file."} ), 400
+            _, _, df, _, _ = parsed_data
+            os.remove(filepath)
+            
+            output = io.StringIO()
+            df.to_csv(output, index=False)
+            output.seek(0)
+            
+            new_filename = f"{os.path.splitext(filename)[0]}.csv"
+            return output.getvalue(), 200, {
+                "Content-Type": "text/csv",
+                "Content-Disposition": f"attachment; filename={new_filename}"
+            }
+        
+        else:
+            return jsonify({"error": "Invalid file type. Please upload an .ale file."} ), 400
+
+    except ValueError as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+@app.route("/api/ale/multi_to_csvs", methods=["POST"])
+def convert_ales_to_csvs():
+    if "files" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    files = request.files.getlist("files")
+
+    if not files or all(f.filename == "" for f in files):
+        return jsonify({"error": "No selected files"}), 400
+
+    check_tape_length = request.form.get("check_tape_length", "true").lower() == "true"
+    csv_files = []
+    for file in files:
+        if file and file.filename.lower().endswith('.ale'):
+            filename = secure_filename(file.filename)
+            try:
+                filepath = f"/tmp/{filename}"
+                file.save(filepath)
+                convert_cr_to_lf(filepath)
+                
+                parsed_data = ALE_Parser.ale_read_parser(filepath, check_tape_length=check_tape_length)
+                if parsed_data[2] is None:
+                    print(f"Skipping file {filename} due to parsing error.")
+                    continue
+                
+                _, _, df, _, _ = parsed_data
+                os.remove(filepath)
+                
+                output = io.StringIO()
+                df.to_csv(output, index=False)
+                output.seek(0)
+                
+                csv_filename = f"{os.path.splitext(filename)[0]}.csv"
+                csv_files.append({
+                    "filename": csv_filename,
+                    "content": output.getvalue()
+                })
+
+            except ValueError as e:
+                print(f"Error processing file {filename}: {e}")
+                continue
+            except Exception as e:
+                print(f"Error processing file {filename}: {e}")
+                continue
+    
+    if not csv_files:
+        return jsonify({"error": "No valid ALE files to process"}), 400
+
+    return jsonify(csv_files)
+
+@app.route("/api/ale/merge_to_csv", methods=["POST"])
+def merge_ales_to_csv():
+    if "files" not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    files = request.files.getlist("files")
+
+    if not files or all(f.filename == "" for f in files):
+        return jsonify({"error": "No selected files"}), 400
+
+    check_tape_length = request.form.get("check_tape_length", "true").lower() == "true"
+    all_dfs = []
+    for file in files:
+        if file and file.filename.lower().endswith('.ale'):
+            filename = secure_filename(file.filename)
+            try:
+                filepath = f"/tmp/{filename}"
+                file.save(filepath)
+                convert_cr_to_lf(filepath)
+                parsed_data = ALE_Parser.ale_read_parser(filepath, check_tape_length=check_tape_length)
+                if parsed_data[2] is None:
+                    print(f"Skipping file {filename} due to parsing error.")
+                    continue
+                _, _, df, _, _ = parsed_data
+                os.remove(filepath)
+                all_dfs.append(df)
+
+            except ValueError as e:
+                print(f"Error processing file {filename}: {e}")
+                continue
+            except Exception as e:
+                print(f"Error processing file {filename}: {e}")
+                continue
+    
+    if not all_dfs:
+        return jsonify({"error": "No valid ALE files to merge"}), 400
+
+    merged_df = pd.concat(all_dfs, ignore_index=True)
+    
+    output = io.StringIO()
+    merged_df.to_csv(output, index=False)
+    output.seek(0)
+    
+    return output.getvalue(), 200, {
+        "Content-Type": "text/csv",
+        "Content-Disposition": "attachment; filename=merged_ales.csv"
+    }
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

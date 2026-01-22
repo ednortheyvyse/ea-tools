@@ -1392,6 +1392,188 @@ const MXFInspector = () => {
     );
 }
 
+// --- 10. ALE Converter ---
+
+const AleConverter = () => {
+    const [mode, setMode] = useState<'multi' | 'merge'>('multi');
+    const [multiCsvDragActive, setMultiCsvDragActive] = useState(false);
+    const [mergeCsvDragActive, setMergeCsvDragActive] = useState(false);
+    const [loading, setLoading] = useState<string | null>(null); // 'multi' or 'merge'
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+
+    const handleSingleFileApiResponse = async (response: Response, successFileName: string) => {
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.details || err.error || `HTTP error! status: ${response.status}`);
+        }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = successFileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        setSuccess(`${successFileName} downloaded successfully.`);
+    };
+
+    const handleMultiFileApiResponse = async (response: Response) => {
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.details || err.error || `HTTP error! status: ${response.status}`);
+        }
+
+        const files = await response.json();
+        if (!Array.isArray(files)) {
+            throw new Error("Invalid response from server. Expected an array of files.");
+        }
+
+        files.forEach(file => {
+            const blob = new Blob([file.content], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = file.filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        });
+        setSuccess(`${files.length} CSV files downloaded successfully.`);
+    };
+
+    const processFiles = async (files: FileList | null, apiEndpoint: string, operation: 'multi' | 'merge', successFileName?: string) => {
+        if (!files || files.length === 0) {
+            setError("Please select one or more .ale files.");
+            return;
+        }
+
+        setLoading(operation);
+        setError(null);
+        setSuccess(null);
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+            formData.append("files", files[i]);
+        }
+
+        try {
+            const response = await fetch(apiEndpoint, {
+                method: "POST",
+                body: formData,
+            });
+            if (operation === 'multi') {
+                await handleMultiFileApiResponse(response);
+            } else if (successFileName) {
+                await handleSingleFileApiResponse(response, successFileName);
+            }
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setLoading(null);
+        }
+    };
+
+    const handleDrag = (e: React.DragEvent, setActive: React.Dispatch<React.SetStateAction<boolean>>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.type === "dragenter" || e.type === "dragover") {
+            setActive(true);
+        } else if (e.type === "dragleave") {
+            setActive(false);
+        }
+    };
+
+    const handleDrop = (e: React.DragEvent, setActive: React.Dispatch<React.SetStateAction<boolean>>, callback: (files: FileList) => void) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setActive(false);
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            callback(e.dataTransfer.files);
+        }
+    };
+
+    const uploader = (id: 'multi' | 'merge', dragActive: boolean, setDragActive: React.Dispatch<React.SetStateAction<boolean>>, onFiles: (files: FileList | null) => void, title: string, description: string) => (
+        <div className="space-y-4">
+            <h3 className="text-2xl font-bold text-gray-900">{title}</h3>
+            <p className="text-gray-500 text-base">{description}</p>
+            
+            {loading === id && (
+                 <div className="rounded-2xl p-8 text-center flex flex-col items-center justify-center bg-gray-50 border border-gray-200">
+                    <Hourglass className="h-8 w-8 text-gray-600 animate-spin" />
+                    <div className="text-lg font-bold mt-3 text-gray-900">Processing...</div>
+                </div>
+            )}
+
+            {error && loading !== id && (
+                 <div className="rounded-2xl p-8 text-center flex flex-col items-center justify-center bg-red-50 border border-red-300">
+                    <X className="h-8 w-8 text-red-600" />
+                    <div className="text-lg font-bold mt-3 text-red-900">Error</div>
+                    <p className="text-red-700 text-sm mt-1">{error}</p>
+                </div>
+            )}
+             {success && loading !== id && (
+                 <div className="rounded-2xl p-8 text-center flex flex-col items-center justify-center bg-green-50 border border-green-300">
+                    <Check className="h-8 w-8 text-green-600" />
+                    <div className="text-lg font-bold mt-3 text-green-900">Success</div>
+                    <p className="text-green-700 text-sm mt-1">{success}</p>
+                </div>
+            )}
+
+            <div 
+                onDragEnter={(e) => handleDrag(e, setDragActive)}
+                onDragLeave={(e) => handleDrag(e, setDragActive)}
+                onDragOver={(e) => handleDrag(e, setDragActive)}
+                onDrop={(e) => handleDrop(e, setDragActive, (files) => onFiles(files))}
+                className={`border-2 border-dashed rounded-2xl p-12 text-center transition-all flex flex-col items-center justify-center
+                    ${dragActive ? 'border-black bg-gray-50' : 'border-gray-300 bg-white hover:border-gray-400 hover:bg-gray-50'}
+                `}
+            >
+                <div className="p-4 bg-gray-100 rounded-full mb-6">
+                    <UploadCloud className="h-10 w-10 text-gray-600" />
+                </div>
+                <div className="text-xl font-bold mb-4 text-gray-900">Drag & Drop .ALE Files</div>
+                <label className="cursor-pointer">
+                    <span className="bg-black text-white px-6 py-3 font-bold rounded-lg hover:bg-gray-800 transition inline-block">Or Browse Files</span>
+                    <input type="file" accept=".ale" multiple className="hidden" onChange={(e) => onFiles(e.target.files)} />
+                </label>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="space-y-8 max-w-3xl mx-auto">
+            <div className="bg-gray-50 p-6 rounded-xl border border-gray-200">
+                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Conversion Mode</label>
+                <div className="flex bg-white rounded-lg p-1 border border-gray-300">
+                    <button
+                        onClick={() => { setMode("multi"); setError(null); setSuccess(null); }}
+                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === "multi" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
+                    >
+                        Separate CSVs
+                    </button>
+                    <button
+                        onClick={() => { setMode("merge"); setError(null); setSuccess(null); }}
+                        className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${mode === "merge" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
+                    >
+                        Merge to Single CSV
+                    </button>
+                </div>
+            </div>
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                {mode === 'multi' 
+                    ? uploader('multi', multiCsvDragActive, setMultiCsvDragActive, (files) => processFiles(files, '/api/ale/multi_to_csvs', 'multi'), "Convert ALEs to separate CSVs", "Upload multiple ALE files and get each one converted to a separate CSV file.")
+                    : uploader('merge', mergeCsvDragActive, setMergeCsvDragActive, (files) => processFiles(files, '/api/ale/merge_to_csv', 'merge', 'merged_ales.csv'), "Merge ALEs to a single CSV", "Upload multiple ALE files to combine them into a single, unified CSV file.")
+                }
+            </div>
+        </div>
+    );
+};
+
 
 // --- MAIN APP ---
 
@@ -1401,6 +1583,7 @@ const TOOLS = [
   { id: "speed", title: "Speed Calc", icon: Gauge, desc: "Find speed ramp % or restore footage." },
   { id: "mask", title: "Mask Gen", icon: ScanLine, desc: "Generate PNG overlays for cinema aspect ratios." },
   { id: "edl", title: "EDL Hacker", icon: FileSpreadsheet, desc: "Convert EDL to CSV for spreadsheets." },
+  { id: "ale", title: "ALE Converter", icon: FileText, desc: "Convert and merge Avid Log Exchange files." },
   { id: "avb", title: "AVB Inspector", icon: FileScan, desc: "Inspect the contents of an Avid Bin (.avb) file." },
   { id: "mxf", title: "MXF Inspector", icon: FileScan, desc: "Probe technical metadata of MXF files." },
   { id: "data", title: "Data Rate", icon: HardDrive, desc: "Estimate storage needs for shoots." },
@@ -1420,6 +1603,7 @@ const App = () => {
       case "speed": return <SpeedCalculator />;
       case "mask": return <MaskGenerator />;
       case "edl": return <EDLHacker />;
+      case "ale": return <AleConverter />;
       case "avb": return <AVBInspector />;
       case "mxf": return <MXFInspector />;
       case "data": return <DataRateCalculator />;

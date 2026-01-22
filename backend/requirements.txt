@@ -1,3 +1,6 @@
 Flask
 pyavb
 pycmx
+pandas
+chardet
+colorama
