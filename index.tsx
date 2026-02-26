@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
+import DNXCodecCalculator from "./DNXCodecCalculator";
 import {
   Calculator,
   Maximize,
@@ -1588,6 +1589,7 @@ const TOOLS = [
   { id: "mxf", title: "MXF Inspector", icon: FileScan, desc: "Probe technical metadata of MXF files." },
   { id: "data", title: "Data Rate", icon: HardDrive, desc: "Estimate storage needs for shoots." },
   { id: "guess", title: "Dur. Guess", icon: Hourglass, desc: "How much footage fits on this drive?" },
+  { id: "dnx-comparison", title: "DNx Comparison", icon: FileSpreadsheet, desc: "A simple list of legacy DNxHD codecs and their modern equivalents." },
 ];
 
 const App = () => {
@@ -1608,6 +1610,7 @@ const App = () => {
       case "mxf": return <MXFInspector />;
       case "data": return <DataRateCalculator />;
       case "guess": return <DurationGuesstimator />;
+      case "dnx-comparison": return <DNXCodecCalculator />;
       default: return null;
     }
   };
