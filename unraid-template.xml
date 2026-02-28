@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>ea-tools</Name>
+  <Repository>your-dockerhub-username/ea-tools</Repository>
+  <Registry>https://hub.docker.com/r/your-dockerhub-username/ea-tools</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/ednortheyvyse/ea-tools/issues</Support>
+  <Project>https://github.com/ednortheyvyse/ea-tools</Project>
+  <Overview>A suite of offline-first utilities designed for the modern Assistant Editor. Includes Timecode Calc, ALE Converter, MXF Inspector, and more.</Overview>
+  <Category>Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:5001]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/ednortheyvyse/ea-tools/main/public/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>A suite of offline-first utilities designed for the modern Assistant Editor.</Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>5001</HostPort>
+        <ContainerPort>5001</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/appdata/ea-tools/tmp</HostDir>
+      <ContainerDir>/tmp</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Value>production</Value>
+      <Name>FLASK_ENV</Name>
+      <Mode/>
+    </Variable>
+  </Environment>
+  <Config Name="Web UI Port" Target="5001" Default="5001" Mode="tcp" Description="Port for the Web UI" Type="Port" Display="always" Required="true" Mask="false">5001</Config>
+  <Config Name="Temporary Directory" Target="/tmp" Default="/mnt/user/appdata/ea-tools/tmp" Mode="rw" Description="Directory for temporary file processing" Type="Path" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/ea-tools/tmp</Config>
+  <Config Name="Environment" Target="FLASK_ENV" Default="production" Mode="" Description="Flask Environment" Type="Variable" Display="advanced" Required="false" Mask="false">production</Config>
+</Container>
