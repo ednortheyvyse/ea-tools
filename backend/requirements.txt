@@ -4,3 +4,4 @@ pycmx
 pandas
 chardet
 colorama
+debugpy

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import DNXCodecCalculator from "./DNXCodecCalculator";
 import {
   Calculator,
   Maximize,
@@ -1589,7 +1588,6 @@ const TOOLS = [
   { id: "mxf", title: "MXF Inspector", icon: FileScan, desc: "Probe technical metadata of MXF files." },
   { id: "data", title: "Data Rate", icon: HardDrive, desc: "Estimate storage needs for shoots." },
   { id: "guess", title: "Dur. Guess", icon: Hourglass, desc: "How much footage fits on this drive?" },
-  { id: "dnx-comparison", title: "DNx Comparison", icon: FileSpreadsheet, desc: "A simple list of legacy DNxHD codecs and their modern equivalents." },
 ];
 
 const App = () => {
@@ -1610,7 +1608,6 @@ const App = () => {
       case "mxf": return <MXFInspector />;
       case "data": return <DataRateCalculator />;
       case "guess": return <DurationGuesstimator />;
-      case "dnx-comparison": return <DNXCodecCalculator />;
       default: return null;
     }
   };
@@ -1715,10 +1712,10 @@ const App = () => {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 lg:pl-72 w-full min-h-[calc(100vh-64px)] lg:min-h-screen">
+        <main className="flex-1 lg:pl-72 w-full min-h-screen flex flex-col">
             {activeToolId ? (
                 <div className={`
-                    mx-auto p-6 lg:p-12 
+                    mx-auto p-6 lg:p-12
                     ${['edl', 'avb', 'mxf'].includes(activeToolId) ? 'w-full max-w-full' : 'max-w-5xl'}
                 `}>
                     {/* Tool Header */}
@@ -1735,17 +1732,17 @@ const App = () => {
                 </div>
             ) : (
                 <div className="max-w-7xl mx-auto p-6 lg:p-12">
-                    <div className="mb-12 mt-4 lg:mt-0">
-                        <h1 className="text-5xl lg:text-7xl font-serif font-black text-black mb-6 tracking-tighter">
+                    <div className="mb-8 mt-4 lg:mt-0 flex-none">
+                        <h1 className="text-4xl lg:text-6xl font-serif font-black text-black mb-4 tracking-tighter">
                             THE<br/>TOOLS
                         </h1>
-                        <p className="text-xl text-gray-500 max-w-2xl leading-relaxed">
+                        <p className="text-lg text-gray-500 max-w-2xl leading-relaxed">
                             A suite of offline-first utilities designed for the modern Assistant Editor. 
                             Simple, fast, and secure.
                         </p>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                         {TOOLS.map(tool => (
                              <ToolCard 
                                 key={tool.id}
