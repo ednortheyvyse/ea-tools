@@ -3,12 +3,15 @@ services:
     image: eatools
     build:
       context: .
-      dockerfile: ./Dockerfile
-    command: ["npm", "run", "dev"]
+      dockerfile: Dockerfile.dev
+    command: ["npm", "run", "dev", "--", "--host"]
     environment:
       NODE_ENV: development
     ports:
       - 3000:3000
+    volumes:
+      - .:/app
+      - /app/node_modules
     depends_on:
       - backend
   backend:
