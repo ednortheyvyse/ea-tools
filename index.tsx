@@ -580,10 +580,33 @@ const MaskGenerator = () => {
 
 const EDLHacker = () => {
   const [edlData, setEdlData] = useState<any[]>([]);
+  const [rawEdlText, setRawEdlText] = useState<string>('');
   const [dragActive, setDragActive] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'grouped'>('table');
+  const [fps, setFps] = useState<number>(24);
 
-  const parseEDL = (text: string, filename?: string) => {
+  const detectFramerate = (text: string): number => {
+      if (text.includes('FCM: DROP FRAME')) return 29.97;
+      if (text.includes('FCM: NON-DROP FRAME')) return 30; // Could be 24, 25, 30. 30 is a safe bet.
+      
+      const tcRegex = /(\d{2}:\d{2}:\d{2}:\d{2})/g;
+      const matches = text.match(tcRegex);
+      if (!matches) return 24; // Default
+
+      let maxFrame = 0;
+      for (const match of matches) {
+          const frame = parseInt(match.slice(-2));
+          if (frame > maxFrame) maxFrame = frame;
+      }
+
+      if (maxFrame > 50) return 60;
+      if (maxFrame > 40) return 50;
+      if (maxFrame > 25) return 29.97;
+      if (maxFrame > 24) return 25;
+      return 24;
+  };
+
+  const parseEDL = (text: string, currentFps: number, filename?: string) => {
     const lines = text.split('\n');
     const clips = [];
     let currentClip: any = {};
@@ -633,6 +656,10 @@ const EDLHacker = () => {
             else if (reelVal === 'AX') reelVal = 'Auxiliary (AX)';
             else if (reelVal === 'GEN') reelVal = 'Generator (GEN)';
 
+            const srcInFrames = tcToFrames(eventMatch[5], currentFps);
+            const srcOutFrames = tcToFrames(eventMatch[6], currentFps);
+            const srcDurFrames = srcOutFrames - srcInFrames;
+
             currentClip = {
                 id: eventMatch[1],
                 reel: reelVal,
@@ -640,6 +667,7 @@ const EDLHacker = () => {
                 trans: transVal,
                 srcIn: eventMatch[5],
                 srcOut: eventMatch[6],
+                srcDur: framesToTC(srcDurFrames, currentFps),
                 recIn: eventMatch[7],
                 recOut: eventMatch[8],
                 name: '',
@@ -689,11 +717,25 @@ const EDLHacker = () => {
     if (currentClip.id) clips.push(currentClip);
     setEdlData(clips);
   };
+  
+  useEffect(() => {
+      if (rawEdlText) {
+          const detectedFps = detectFramerate(rawEdlText);
+          setFps(detectedFps);
+          parseEDL(rawEdlText, detectedFps);
+      }
+  }, [rawEdlText]);
+
+  useEffect(() => {
+      if (rawEdlText) {
+          parseEDL(rawEdlText, fps);
+      }
+  }, [fps]);
 
   const handleFile = (file: File) => {
     if (file) {
         const reader = new FileReader();
-        reader.onload = (ev) => parseEDL(ev.target?.result as string, file.name);
+        reader.onload = (ev) => setRawEdlText(ev.target?.result as string);
         reader.readAsText(file);
     }
   };
@@ -719,16 +761,17 @@ const EDLHacker = () => {
 
   const downloadCSV = () => {
     if (edlData.length === 0) return;
-    const headers = ["Clip Number", "Track", "Reel", "Transition", "SRC IN", "SRC OUT", "TL IN", "TL OUT", "Clip Name", "Source File Name"];
+    const headers = ["Clip Number", "Track", "Reel", "Transition", "SRC IN", "SRC OUT", "Source Duration", "TL IN", "TL OUT", "Clip Name", "Source File Name"];
     const csvContent = "data:text/csv;charset=utf-8," 
         + headers.join(",") + "\n"
-        + edlData.map(c => `${c.id},${c.track},${c.reel},${c.trans},${c.srcIn},${c.srcOut},${c.recIn},${c.recOut},"${c.name}","${c.sourceFile}"`).join("\n");
+        + edlData.map(c => `${c.id},${c.track},${c.reel},${c.trans},${c.srcIn},${c.srcOut},${c.srcDur},${c.recIn},${c.recOut},"${c.name}","${c.sourceFile}"`).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
     link.setAttribute("download", "edl_export.csv");
     document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   const groupedEDL: any[] = [];
@@ -765,17 +808,40 @@ const EDLHacker = () => {
           </div>
       ) : (
           <div className="bg-white border border-gray-200 rounded-xl flex flex-col shadow-sm overflow-hidden">
-              <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 flex-none">
-                  <h3 className="font-bold text-gray-900 flex items-center gap-2">
-                    <Check size={16} className="text-black" />
-                    {edlData.length} Clips Extracted
-                  </h3>
+              <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 flex-none flex-wrap gap-4">
+                  <div className="flex items-center gap-4">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                        <Check size={16} className="text-black" />
+                        {edlData.length} Clips Extracted
+                    </h3>
+                    <div className="flex items-center gap-2">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">FPS</label>
+                        <select
+                            onChange={(e) => {
+                                if (e.target.value) setFps(Number(e.target.value));
+                            }}
+                            className="bg-white border border-gray-300 rounded-md px-2 py-1 text-gray-900 text-xs focus:ring-2 focus:ring-black outline-none"
+                            value={FRAME_RATES.includes(fps) ? fps : ""}
+                        >
+                            <option value="">Custom</option>
+                            {FRAME_RATES.map((r) => (
+                                <option key={r} value={r}>{r}</option>
+                            ))}
+                        </select>
+                        <input 
+                            type="number" 
+                            value={fps} 
+                            onChange={e => setFps(Number(e.target.value))}
+                            className="w-20 bg-white px-2 py-1 border border-gray-300 rounded-md text-gray-900 font-mono text-xs focus:ring-2 focus:ring-black outline-none"
+                        />
+                    </div>
+                  </div>
                   <div className="flex gap-3">
                     <button onClick={() => setViewMode(viewMode === 'table' ? 'grouped' : 'table')} className="text-gray-500 hover:text-black text-sm font-medium px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-2">
                         {viewMode === 'table' ? <List size={14} /> : <FileSpreadsheet size={14} />}
                         {viewMode === 'table' ? 'Grouped View' : 'Table View'}
                     </button>
-                    <button onClick={() => setEdlData([])} className="text-gray-500 hover:text-black text-sm font-medium px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors">
+                    <button onClick={() => { setEdlData([]); setRawEdlText(''); }} className="text-gray-500 hover:text-black text-sm font-medium px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors">
                         Clear
                     </button>
                     <button onClick={downloadCSV} className="text-white bg-black hover:bg-gray-800 text-sm font-bold px-4 py-1.5 rounded-md transition-colors flex items-center gap-2 shadow-sm">
@@ -804,6 +870,10 @@ const EDLHacker = () => {
                                                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Source</span>
                                                   <div className="font-mono text-xs text-gray-600">{clip.srcIn}</div>
                                                   <div className="font-mono text-xs text-gray-600">{clip.srcOut}</div>
+                                              </div>
+                                              <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
+                                                  <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Src Duration</span>
+                                                  <div className="font-mono text-xs text-gray-900 font-medium">{clip.srcDur}</div>
                                               </div>
                                               <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
                                                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Timeline</span>
@@ -844,6 +914,7 @@ const EDLHacker = () => {
                                 <th className="p-4 border-b border-gray-200">Transition</th>
                                 <th className="p-4 border-b border-gray-200">SRC IN</th>
                                 <th className="p-4 border-b border-gray-200">SRC OUT</th>
+                                <th className="p-4 border-b border-gray-200">SRC DUR</th>
                                 <th className="p-4 border-b border-gray-200">TL IN</th>
                                 <th className="p-4 border-b border-gray-200">TL OUT</th>
                                 <th className="p-4 border-b border-gray-200">Clip Name</th>
@@ -859,6 +930,7 @@ const EDLHacker = () => {
                                     <td className="p-4 font-medium text-gray-900">{clip.trans}</td>
                                     <td className="p-4">{clip.srcIn}</td>
                                     <td className="p-4">{clip.srcOut}</td>
+                                    <td className="p-4 font-bold text-gray-900">{clip.srcDur}</td>
                                     <td className="p-4">{clip.recIn}</td>
                                     <td className="p-4">{clip.recOut}</td>
                                     <td className="p-4 font-medium font-sans text-gray-900">{clip.name}</td>
