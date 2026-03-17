@@ -581,24 +581,48 @@ const EDLHacker = () => {
   const [edlData, setEdlData] = useState<any[]>([]);
   const [dragActive, setDragActive] = useState(false);
 
-  const parseEDL = (text: string) => {
+  const parseEDL = (text: string, filename?: string) => {
     const lines = text.split('\n');
     const clips = [];
     let currentClip: any = {};
+    let globalTrack = '';
+
+    if (filename) {
+        const fileTrackMatch = filename.match(/(?:^|[\s_-])([VA]\d+)(?:\.[^.]+)?$/i);
+        if (fileTrackMatch) {
+            globalTrack = fileTrackMatch[1].toUpperCase();
+        }
+    }
     
     // CMX 3600 standard regex: Index, Reel, Type, Trans, SrcIn, SrcOut, RecIn, RecOut
     const eventRegex = /^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})/;
     const nameRegex = /\*\s*FROM CLIP NAME:\s*(.*)/;
     const sourceFileRegex = /\*\s*SOURCE FILE:\s*(.*)/;
+    const trackCommentRegex = /\*\s*(?:TARGET\s+)?TRACK:\s*([VA]\d+)/i;
+    const titleRegex = /^TITLE:\s*(.*)/i;
 
     for (const line of lines) {
+        const titleMatch = line.match(titleRegex);
+        if (titleMatch && !globalTrack) {
+            const titleTrackMatch = titleMatch[1].trim().match(/(?:^|[\s_-])([VA]\d+)$/i);
+            if (titleTrackMatch) {
+                globalTrack = titleTrackMatch[1].toUpperCase();
+            }
+        }
+
         const eventMatch = line.match(eventRegex);
         if (eventMatch) {
             if (currentClip.id) clips.push(currentClip);
+
+            let trackVal = eventMatch[3];
+            if ((trackVal === 'V' || trackVal === 'A') && globalTrack && globalTrack.startsWith(trackVal)) {
+                trackVal = globalTrack;
+            }
+
             currentClip = {
                 id: eventMatch[1],
                 reel: eventMatch[2],
-                track: eventMatch[3],
+                track: trackVal,
                 trans: eventMatch[4],
                 srcIn: eventMatch[5],
                 srcOut: eventMatch[6],
@@ -622,6 +646,11 @@ const EDLHacker = () => {
             if (sourceMatch) {
                 currentClip.sourceFile = sourceMatch[1].trim();
             }
+
+            const trackMatch = line.match(trackCommentRegex);
+            if (trackMatch) {
+                currentClip.track = trackMatch[1].toUpperCase();
+            }
         }
     }
     if (currentClip.id) clips.push(currentClip);
@@ -631,7 +660,7 @@ const EDLHacker = () => {
   const handleFile = (file: File) => {
     if (file) {
         const reader = new FileReader();
-        reader.onload = (ev) => parseEDL(ev.target?.result as string);
+        reader.onload = (ev) => parseEDL(ev.target?.result as string, file.name);
         reader.readAsText(file);
     }
   };
