@@ -594,8 +594,8 @@ const EDLHacker = () => {
         }
     }
     
-    // CMX 3600 standard regex: Index, Reel, Type, Trans, SrcIn, SrcOut, RecIn, RecOut
-    const eventRegex = /^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})/;
+    // CMX 3600 standard regex: Index, Reel, Type, Trans, [Optional Duration], SrcIn, SrcOut, RecIn, RecOut
+    const eventRegex = /^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)(?:.*?)\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})/;
     const nameRegex = /\*\s*FROM CLIP NAME:\s*(.*)/;
     const sourceFileRegex = /\*\s*SOURCE FILE:\s*(.*)/;
     const trackCommentRegex = /\*\s*(?:TARGET\s+)?TRACK:\s*([VA]\d+)/i;
@@ -619,11 +619,17 @@ const EDLHacker = () => {
                 trackVal = globalTrack;
             }
 
+            let transVal = eventMatch[4];
+            if (transVal === 'C') transVal = 'Cut';
+            else if (transVal === 'D') transVal = 'Dissolve';
+            else if (transVal.startsWith('W')) transVal = 'Wipe';
+            else if (transVal === 'K') transVal = 'Key';
+
             currentClip = {
                 id: eventMatch[1],
                 reel: eventMatch[2],
                 track: trackVal,
-                trans: eventMatch[4],
+                trans: transVal,
                 srcIn: eventMatch[5],
                 srcOut: eventMatch[6],
                 recIn: eventMatch[7],
@@ -686,10 +692,10 @@ const EDLHacker = () => {
 
   const downloadCSV = () => {
     if (edlData.length === 0) return;
-    const headers = ["Clip Number", "Track", "Reel", "SRC IN", "SRC OUT", "TL IN", "TL OUT", "Clip Name", "Source File Name"];
+    const headers = ["Clip Number", "Track", "Reel", "Transition", "SRC IN", "SRC OUT", "TL IN", "TL OUT", "Clip Name", "Source File Name"];
     const csvContent = "data:text/csv;charset=utf-8," 
         + headers.join(",") + "\n"
-        + edlData.map(c => `${c.id},${c.track},${c.reel},${c.srcIn},${c.srcOut},${c.recIn},${c.recOut},"${c.name}","${c.sourceFile}"`).join("\n");
+        + edlData.map(c => `${c.id},${c.track},${c.reel},${c.trans},${c.srcIn},${c.srcOut},${c.recIn},${c.recOut},"${c.name}","${c.sourceFile}"`).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -743,6 +749,7 @@ const EDLHacker = () => {
                             <th className="p-4 border-b border-gray-200">Clip #</th>
                             <th className="p-4 border-b border-gray-200">Track</th>
                             <th className="p-4 border-b border-gray-200">Reel</th>
+                            <th className="p-4 border-b border-gray-200">Transition</th>
                             <th className="p-4 border-b border-gray-200">SRC IN</th>
                             <th className="p-4 border-b border-gray-200">SRC OUT</th>
                             <th className="p-4 border-b border-gray-200">TL IN</th>
@@ -757,6 +764,7 @@ const EDLHacker = () => {
                                 <td className="p-4 text-gray-500">{clip.id}</td>
                                 <td className="p-4">{clip.track}</td>
                                 <td className="p-4">{clip.reel}</td>
+                                <td className="p-4 font-medium text-gray-900">{clip.trans}</td>
                                 <td className="p-4">{clip.srcIn}</td>
                                 <td className="p-4">{clip.srcOut}</td>
                                 <td className="p-4">{clip.recIn}</td>
