@@ -768,7 +768,7 @@ const EDLHacker = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "edl_export.csv");
+    link.setAttribute("download", `edl_export_${fps}fps.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
