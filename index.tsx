@@ -799,22 +799,6 @@ const EDLHacker = () => {
                               <div className="divide-y divide-gray-50">
                                   {group.clips.map((clip: any, cIdx: number) => (
                                       <div key={cIdx} className="p-4 flex flex-col lg:flex-row gap-4 lg:gap-6 items-start lg:items-center hover:bg-gray-50 transition-colors">
-                                          <div className="flex-none w-36">
-                                              <span className={`text-xs font-bold px-2.5 py-1.5 rounded-md border ${
-                                                  clip.trans.includes('Dissolve') ? 'bg-blue-50 text-blue-700 border-blue-100' : 
-                                                  clip.trans.includes('Wipe') ? 'bg-purple-50 text-purple-700 border-purple-100' :
-                                                  'bg-gray-50 text-gray-700 border-gray-200'
-                                              }`}>
-                                                  {clip.trans}
-                                              </span>
-                                          </div>
-                                          <div className="flex-1 min-w-0 w-full">
-                                              <div className="font-bold text-gray-900 truncate text-base">{clip.name || clip.sourceFile || 'Unnamed Clip'}</div>
-                                              <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-2">
-                                                  <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-mono">Reel: {clip.reel}</span>
-                                                  {clip.sourceFile && <span className="truncate">File: {clip.sourceFile}</span>}
-                                              </div>
-                                          </div>
                                           <div className="flex-none flex flex-wrap gap-2 w-full lg:w-auto">
                                               <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
                                                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Source</span>
@@ -826,6 +810,22 @@ const EDLHacker = () => {
                                                   <div className="font-mono text-xs text-gray-900 font-medium">{clip.recIn}</div>
                                                   <div className="font-mono text-xs text-gray-900 font-medium">{clip.recOut}</div>
                                               </div>
+                                          </div>
+                                          <div className="flex-1 min-w-0 w-full">
+                                              <div className="font-bold text-gray-900 truncate text-base">{clip.name || clip.sourceFile || 'Unnamed Clip'}</div>
+                                              <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-2">
+                                                  <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-mono">Reel: {clip.reel}</span>
+                                                  {clip.sourceFile && <span className="truncate">File: {clip.sourceFile}</span>}
+                                              </div>
+                                          </div>
+                                          <div className="flex-none w-36 lg:text-right">
+                                              <span className={`text-xs font-bold px-2.5 py-1.5 rounded-md border inline-block ${
+                                                  clip.trans.includes('Dissolve') ? 'bg-blue-50 text-blue-700 border-blue-100' : 
+                                                  clip.trans.includes('Wipe') ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                                  'bg-gray-50 text-gray-700 border-gray-200'
+                                              }`}>
+                                                  {clip.trans}
+                                              </span>
                                           </div>
                                       </div>
                                   ))}
