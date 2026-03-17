@@ -22,6 +22,7 @@ import {
   Code2,
   FileScan,
   Scale,
+  List,
 } from "lucide-react";
 
 // --- Types & Constants ---
@@ -580,6 +581,7 @@ const MaskGenerator = () => {
 const EDLHacker = () => {
   const [edlData, setEdlData] = useState<any[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'grouped'>('table');
 
   const parseEDL = (text: string, filename?: string) => {
     const lines = text.split('\n');
@@ -729,6 +731,16 @@ const EDLHacker = () => {
     link.click();
   };
 
+  const groupedEDL: any[] = [];
+  let currentGroup: any = null;
+  for (const clip of edlData) {
+      if (!currentGroup || currentGroup.id !== clip.id) {
+          currentGroup = { id: clip.id, track: clip.track, clips: [] };
+          groupedEDL.push(currentGroup);
+      }
+      currentGroup.clips.push(clip);
+  }
+
   return (
     <div className="space-y-6 w-full h-full">
       {edlData.length === 0 ? (
@@ -759,6 +771,10 @@ const EDLHacker = () => {
                     {edlData.length} Clips Extracted
                   </h3>
                   <div className="flex gap-3">
+                    <button onClick={() => setViewMode(viewMode === 'table' ? 'grouped' : 'table')} className="text-gray-500 hover:text-black text-sm font-medium px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors flex items-center gap-2">
+                        {viewMode === 'table' ? <List size={14} /> : <FileSpreadsheet size={14} />}
+                        {viewMode === 'table' ? 'Grouped View' : 'Table View'}
+                    </button>
                     <button onClick={() => setEdlData([])} className="text-gray-500 hover:text-black text-sm font-medium px-3 py-1.5 hover:bg-gray-100 rounded-md transition-colors">
                         Clear
                     </button>
@@ -767,40 +783,92 @@ const EDLHacker = () => {
                     </button>
                   </div>
               </div>
-              <div className="flex-1 overflow-auto max-h-[70vh]">
-                <table className="w-full text-left text-sm text-gray-700 border-collapse">
-                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0 z-10 text-xs uppercase tracking-wider shadow-sm">
-                        <tr>
-                            <th className="p-4 border-b border-gray-200">Clip #</th>
-                            <th className="p-4 border-b border-gray-200">Track</th>
-                            <th className="p-4 border-b border-gray-200">Reel</th>
-                            <th className="p-4 border-b border-gray-200">Transition</th>
-                            <th className="p-4 border-b border-gray-200">SRC IN</th>
-                            <th className="p-4 border-b border-gray-200">SRC OUT</th>
-                            <th className="p-4 border-b border-gray-200">TL IN</th>
-                            <th className="p-4 border-b border-gray-200">TL OUT</th>
-                            <th className="p-4 border-b border-gray-200">Clip Name</th>
-                            <th className="p-4 border-b border-gray-200">Source File</th>
-                        </tr>
-                    </thead>
-                    <tbody className="font-mono text-xs divide-y divide-gray-100">
-                        {edlData.map((clip, i) => (
-                            <tr key={i} className="hover:bg-gray-50 transition-colors">
-                                <td className="p-4 text-gray-500">{clip.id}</td>
-                                <td className="p-4">{clip.track}</td>
-                                <td className="p-4">{clip.reel}</td>
-                                <td className="p-4 font-medium text-gray-900">{clip.trans}</td>
-                                <td className="p-4">{clip.srcIn}</td>
-                                <td className="p-4">{clip.srcOut}</td>
-                                <td className="p-4">{clip.recIn}</td>
-                                <td className="p-4">{clip.recOut}</td>
-                                <td className="p-4 font-medium font-sans text-gray-900">{clip.name}</td>
-                                <td className="p-4 font-medium font-sans text-gray-500">{clip.sourceFile}</td>
+              {viewMode === 'grouped' ? (
+                  <div className="flex-1 overflow-auto max-h-[70vh] bg-gray-50 p-4 space-y-4">
+                      {groupedEDL.map((group, gIdx) => (
+                          <div key={gIdx} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-300">
+                              <div className="bg-gray-100 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                                  <span className="font-bold text-gray-800 flex items-center gap-2">
+                                      <span className="text-gray-400 text-xs uppercase tracking-wider font-bold">Event</span>
+                                      {group.id}
+                                  </span>
+                                  <span className="text-xs font-bold bg-white border border-gray-200 text-gray-600 px-2 py-1 rounded-md shadow-sm">
+                                      Track: {group.track}
+                                  </span>
+                              </div>
+                              <div className="divide-y divide-gray-50">
+                                  {group.clips.map((clip: any, cIdx: number) => (
+                                      <div key={cIdx} className="p-4 flex flex-col lg:flex-row gap-4 lg:gap-6 items-start lg:items-center hover:bg-gray-50 transition-colors">
+                                          <div className="flex-none w-36">
+                                              <span className={`text-xs font-bold px-2.5 py-1.5 rounded-md border ${
+                                                  clip.trans.includes('Dissolve') ? 'bg-blue-50 text-blue-700 border-blue-100' : 
+                                                  clip.trans.includes('Wipe') ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                                  'bg-gray-50 text-gray-700 border-gray-200'
+                                              }`}>
+                                                  {clip.trans}
+                                              </span>
+                                          </div>
+                                          <div className="flex-1 min-w-0 w-full">
+                                              <div className="font-bold text-gray-900 truncate text-base">{clip.name || clip.sourceFile || 'Unnamed Clip'}</div>
+                                              <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-2">
+                                                  <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-mono">Reel: {clip.reel}</span>
+                                                  {clip.sourceFile && <span className="truncate">File: {clip.sourceFile}</span>}
+                                              </div>
+                                          </div>
+                                          <div className="flex-none flex flex-wrap gap-2 w-full lg:w-auto">
+                                              <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
+                                                  <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Source</span>
+                                                  <div className="font-mono text-xs text-gray-600">{clip.srcIn}</div>
+                                                  <div className="font-mono text-xs text-gray-600">{clip.srcOut}</div>
+                                              </div>
+                                              <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
+                                                  <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Timeline</span>
+                                                  <div className="font-mono text-xs text-gray-900 font-medium">{clip.recIn}</div>
+                                                  <div className="font-mono text-xs text-gray-900 font-medium">{clip.recOut}</div>
+                                              </div>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                  <div className="flex-1 overflow-auto max-h-[70vh]">
+                    <table className="w-full text-left text-sm text-gray-700 border-collapse">
+                        <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0 z-10 text-xs uppercase tracking-wider shadow-sm">
+                            <tr>
+                                <th className="p-4 border-b border-gray-200">Clip #</th>
+                                <th className="p-4 border-b border-gray-200">Track</th>
+                                <th className="p-4 border-b border-gray-200">Reel</th>
+                                <th className="p-4 border-b border-gray-200">Transition</th>
+                                <th className="p-4 border-b border-gray-200">SRC IN</th>
+                                <th className="p-4 border-b border-gray-200">SRC OUT</th>
+                                <th className="p-4 border-b border-gray-200">TL IN</th>
+                                <th className="p-4 border-b border-gray-200">TL OUT</th>
+                                <th className="p-4 border-b border-gray-200">Clip Name</th>
+                                <th className="p-4 border-b border-gray-200">Source File</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
-              </div>
+                        </thead>
+                        <tbody className="font-mono text-xs divide-y divide-gray-100">
+                            {edlData.map((clip, i) => (
+                                <tr key={i} className="hover:bg-gray-50 transition-colors">
+                                    <td className="p-4 text-gray-500">{clip.id}</td>
+                                    <td className="p-4">{clip.track}</td>
+                                    <td className="p-4">{clip.reel}</td>
+                                    <td className="p-4 font-medium text-gray-900">{clip.trans}</td>
+                                    <td className="p-4">{clip.srcIn}</td>
+                                    <td className="p-4">{clip.srcOut}</td>
+                                    <td className="p-4">{clip.recIn}</td>
+                                    <td className="p-4">{clip.recOut}</td>
+                                    <td className="p-4 font-medium font-sans text-gray-900">{clip.name}</td>
+                                    <td className="p-4 font-medium font-sans text-gray-500">{clip.sourceFile}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                  </div>
+              )}
           </div>
       )}
     </div>
