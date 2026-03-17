@@ -597,6 +597,7 @@ const EDLHacker = () => {
     // CMX 3600 standard regex: Index, Reel, Type, Trans, [Optional Duration], SrcIn, SrcOut, RecIn, RecOut
     const eventRegex = /^(\d+)\s+(\S+)\s+(\S+)\s+(\S+)(?:.*?)\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})/;
     const nameRegex = /\*\s*FROM CLIP NAME:\s*(.*)/;
+    const toNameRegex = /\*\s*TO CLIP NAME:\s*(.*)/;
     const sourceFileRegex = /\*\s*SOURCE FILE:\s*(.*)/;
     const trackCommentRegex = /\*\s*(?:TARGET\s+)?TRACK:\s*([VA]\d+)/i;
     const titleRegex = /^TITLE:\s*(.*)/i;
@@ -620,14 +621,19 @@ const EDLHacker = () => {
             }
 
             let transVal = eventMatch[4];
-            if (transVal === 'C') transVal = 'Cut';
-            else if (transVal === 'D') transVal = 'Dissolve';
-            else if (transVal.startsWith('W')) transVal = 'Wipe';
-            else if (transVal === 'K') transVal = 'Key';
+            if (transVal === 'C') transVal = 'Cut (C)';
+            else if (transVal === 'D') transVal = 'Dissolve (D)';
+            else if (transVal.startsWith('W')) transVal = `Wipe (${transVal})`;
+            else if (transVal === 'K') transVal = 'Key (K)';
+
+            let reelVal = eventMatch[2];
+            if (reelVal === 'BL' || reelVal === 'BLK') reelVal = `Black (${reelVal})`;
+            else if (reelVal === 'AX') reelVal = 'Auxiliary (AX)';
+            else if (reelVal === 'GEN') reelVal = 'Generator (GEN)';
 
             currentClip = {
                 id: eventMatch[1],
-                reel: eventMatch[2],
+                reel: reelVal,
                 track: trackVal,
                 trans: transVal,
                 srcIn: eventMatch[5],
@@ -641,21 +647,40 @@ const EDLHacker = () => {
         
         // Parse comments
         if (currentClip.id) {
+            const isTransition = clips.length > 0 && clips[clips.length - 1].id === currentClip.id;
+
             const nameMatch = line.match(nameRegex);
             if (nameMatch) {
-                currentClip.name = nameMatch[1].trim();
-                // If source file hasn't been found yet, default source file to clip name
+                if (isTransition) {
+                    clips[clips.length - 1].name = nameMatch[1].trim();
+                    if (!clips[clips.length - 1].sourceFile) clips[clips.length - 1].sourceFile = clips[clips.length - 1].name;
+                } else {
+                    currentClip.name = nameMatch[1].trim();
+                    if (!currentClip.sourceFile) currentClip.sourceFile = currentClip.name;
+                }
+            }
+
+            const toNameMatch = line.match(toNameRegex);
+            if (toNameMatch) {
+                currentClip.name = toNameMatch[1].trim();
                 if (!currentClip.sourceFile) currentClip.sourceFile = currentClip.name;
             }
 
             const sourceMatch = line.match(sourceFileRegex);
             if (sourceMatch) {
-                currentClip.sourceFile = sourceMatch[1].trim();
+                if (isTransition) {
+                    clips[clips.length - 1].sourceFile = sourceMatch[1].trim();
+                } else {
+                    currentClip.sourceFile = sourceMatch[1].trim();
+                }
             }
 
             const trackMatch = line.match(trackCommentRegex);
             if (trackMatch) {
                 currentClip.track = trackMatch[1].toUpperCase();
+                if (isTransition) {
+                    clips[clips.length - 1].track = trackMatch[1].toUpperCase();
+                }
             }
         }
     }
