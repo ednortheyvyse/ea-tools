@@ -598,7 +598,7 @@ const EDLHacker = () => {
             currentClip = {
                 id: eventMatch[1],
                 reel: eventMatch[2],
-                track: eventMatch[3],
+                type: eventMatch[3],
                 trans: eventMatch[4],
                 srcIn: eventMatch[5],
                 srcOut: eventMatch[6],
@@ -657,10 +657,10 @@ const EDLHacker = () => {
 
   const downloadCSV = () => {
     if (edlData.length === 0) return;
-    const headers = ["Clip Number", "Track", "Reel", "SRC IN", "SRC OUT", "TL IN", "TL OUT", "Clip Name", "Source File Name"];
+    const headers = ["Clip Number", "Reel", "SRC IN", "SRC OUT", "TL IN", "TL OUT", "Clip Name", "Source File Name"];
     const csvContent = "data:text/csv;charset=utf-8," 
         + headers.join(",") + "\n"
-        + edlData.map(c => `${c.id},${c.track},${c.reel},${c.srcIn},${c.srcOut},${c.recIn},${c.recOut},"${c.name}","${c.sourceFile}"`).join("\n");
+        + edlData.map(c => `${c.id},${c.reel},${c.srcIn},${c.srcOut},${c.recIn},${c.recOut},"${c.name}","${c.sourceFile}"`).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -712,7 +712,6 @@ const EDLHacker = () => {
                     <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0 z-10 text-xs uppercase tracking-wider shadow-sm">
                         <tr>
                             <th className="p-4 border-b border-gray-200">Clip #</th>
-                            <th className="p-4 border-b border-gray-200">Track</th>
                             <th className="p-4 border-b border-gray-200">Reel</th>
                             <th className="p-4 border-b border-gray-200">SRC IN</th>
                             <th className="p-4 border-b border-gray-200">SRC OUT</th>
@@ -726,7 +725,6 @@ const EDLHacker = () => {
                         {edlData.map((clip, i) => (
                             <tr key={i} className="hover:bg-gray-50 transition-colors">
                                 <td className="p-4 text-gray-500">{clip.id}</td>
-                                <td className="p-4">{clip.track}</td>
                                 <td className="p-4">{clip.reel}</td>
                                 <td className="p-4">{clip.srcIn}</td>
                                 <td className="p-4">{clip.srcOut}</td>
