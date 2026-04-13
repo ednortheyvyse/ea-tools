@@ -11,7 +11,7 @@ import csv
 import subprocess
 import json
 
-from backend.parsers import edl_parser
+from parsers import edl_parser
 
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), '..', 'dist'))

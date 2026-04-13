@@ -1,5 +1,5 @@
 from typing import List
-from backend.models.event import Event
+from models.event import Event
 
 def apply_sorters(events: List[Event], options: dict) -> List[Event]:
     """

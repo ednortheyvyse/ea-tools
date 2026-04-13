@@ -1,6 +1,6 @@
 import re
 from typing import List
-from backend.models.event import Event
+from models.event import Event
 
 def frames_to_tc(frames: int, fps: float) -> str:
     round_fps = round(fps)
