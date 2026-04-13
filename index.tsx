@@ -2232,6 +2232,7 @@ const DurationFinder = () => {
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   const [fps, setFps] = useState<number>(() => {
     try { const saved = localStorage.getItem('ea_durationFinder'); if (saved) return JSON.parse(saved).fps ?? 24; } catch (e) {}
@@ -2243,8 +2244,13 @@ const DurationFinder = () => {
     return 'auto';
   });
 
-  const [patterns, setPatterns] = useState<{ id: string, name: string, matchString: string }[]>(() => {
-    try { const saved = localStorage.getItem('ea_durationFinder'); if (saved && JSON.parse(saved).patterns) return JSON.parse(saved).patterns; } catch (e) {}
+  const [patterns, setPatterns] = useState<{ id: string, name: string, matchString: string, matchType: 'contains' | 'not_contains' }[]>(() => {
+    try { 
+        const saved = localStorage.getItem('ea_durationFinder'); 
+        if (saved && JSON.parse(saved).patterns) {
+            return JSON.parse(saved).patterns.map((p: any) => ({ ...p, matchType: p.matchType || 'contains' }));
+        }
+    } catch (e) {}
     return [];
   });
 
@@ -2253,10 +2259,11 @@ const DurationFinder = () => {
   }, [fpsMode, fps, patterns]);
 
   const addPattern = () => {
-    setPatterns([...patterns, { id: crypto.randomUUID(), name: "New Category", matchString: "" }]);
+    const lastPatternName = patterns.length > 0 ? patterns[patterns.length - 1].name : "New Category";
+    setPatterns([...patterns, { id: crypto.randomUUID(), name: lastPatternName, matchString: "", matchType: 'contains' }]);
   };
 
-  const updatePattern = (id: string, field: 'name' | 'matchString', value: string) => {
+  const updatePattern = (id: string, field: 'name' | 'matchString' | 'matchType', value: string) => {
     setPatterns(patterns.map(p => p.id === id ? { ...p, [field]: value } : p));
   };
 
@@ -2298,6 +2305,7 @@ const DurationFinder = () => {
     setError(null);
     setLoading(true);
     setEdlData([]);
+    setFileName(file.name);
 
     const formData = new FormData();
     formData.append("files", file);
@@ -2348,8 +2356,14 @@ const DurationFinder = () => {
           let pFrames = 0;
           const pClips = [];
           if (p.matchString) {
+              const lowerMatch = p.matchString.toLowerCase();
               for (const clip of edlData) {
-                  if (clip.reel && clip.reel.toLowerCase().includes(p.matchString.toLowerCase())) {
+                  const matchReel = clip.reel && clip.reel.toLowerCase().includes(lowerMatch);
+                  const matchName = clip.clip_name && clip.clip_name.toLowerCase().includes(lowerMatch);
+                  const hasMatch = matchReel || matchName;
+                  const isMatch = p.matchType === 'not_contains' ? !hasMatch : hasMatch;
+                  
+                  if (isMatch) {
                       const dur = tcToFrames(clip.rec_out, fps) - tcToFrames(clip.rec_in, fps);
                       pFrames += dur;
                       pClips.push({ ...clip, durationFrames: dur });
@@ -2375,11 +2389,12 @@ const DurationFinder = () => {
     const rows = [];
     rows.push(["Duration Summary"]);
     rows.push(["Total Program Duration", framesToTC(totalFrames, fps)]);
+    rows.push(["Timeline FPS", fps]);
     rows.push([]);
-    rows.push(["Category Name", "Match String", "Total Duration", "% of Total Program Duration"]);
+    rows.push(["Category Name", "Rule", "Match String", "Total Duration", "% of Total Program Duration"]);
     
     for (const stat of patternStats) {
-        rows.push([stat.name, stat.matchString, framesToTC(stat.pFrames, fps), stat.percentage.toFixed(2) + "%"]);
+        rows.push([stat.name, stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains', stat.matchString, framesToTC(stat.pFrames, fps), stat.percentage.toFixed(2) + "%"]);
     }
     
     rows.push([]);
@@ -2387,7 +2402,8 @@ const DurationFinder = () => {
     
     for (const stat of patternStats) {
         if (stat.pClips.length > 0) {
-            rows.push([`--- ${stat.name} ---`]);
+            const ruleText = stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains';
+            rows.push([`--- ${stat.name} (${ruleText} "${stat.matchString}") ---`]);
             rows.push(["Camroll (Reel)", "Clip Name", "Duration", "% of Total"]);
             for (const clip of stat.pClips) {
                 const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
@@ -2410,7 +2426,7 @@ const DurationFinder = () => {
 
   return (
     <div className="space-y-6 w-full h-full">
-        <CollapsibleSection title={<><Users size={20} /> Manage Search Patterns</>} defaultOpen={true}>
+        <CollapsibleSection title={<><Search size={20} /> Manage Search Patterns</>} defaultOpen={true}>
                 <div className="p-4 space-y-4">
                     {patterns.map((p, i) => (
                         <div key={p.id} className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
@@ -2419,28 +2435,36 @@ const DurationFinder = () => {
                                 placeholder="Category Name"
                                 value={p.name}
                                 onChange={(e) => updatePattern(p.id, 'name', e.target.value)}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black"
+                                className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black text-sm"
                             />
+                            <select
+                                value={p.matchType || 'contains'}
+                                onChange={(e) => updatePattern(p.id, 'matchType', e.target.value)}
+                                className="h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
+                            >
+                                <option value="contains">Contains</option>
+                                <option value="not_contains">Does Not Contain</option>
+                            </select>
                             <input
                                 type="text"
                                 placeholder="Match String (e.g. A001)"
                                 value={p.matchString}
                                 onChange={(e) => updatePattern(p.id, 'matchString', e.target.value)}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black"
+                                className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black text-sm"
                             />
-                            <button onClick={() => removePattern(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-md">
+                            <button onClick={() => removePattern(p.id)} className="h-10 w-10 shrink-0 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-md">
                                 <Trash2 size={20} />
                             </button>
                         </div>
                     ))}
                     <button onClick={addPattern} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md font-medium text-sm transition-colors">
-                        <UserPlus size={16} /> Add Pattern
+                        <Plus size={16} /> Add Pattern
                     </button>
                 </div>
             </CollapsibleSection>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col justify-center">
+                <div className="min-w-0 bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col justify-center min-h-[160px]">
                     <h4 className="font-bold text-gray-800 mb-4">Timeline FPS</h4>
                     <div className="flex gap-4">
                         <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -2452,24 +2476,26 @@ const DurationFinder = () => {
                             <span>Manual</span>
                         </label>
                     </div>
-                    {fpsMode === 'manual' && (
-                        <div className="mt-4">
-                            <select className="w-full bg-gray-50 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 outline-none focus:ring-2 focus:ring-black" value={fps} onChange={(e) => setFps(Number(e.target.value))}>
-                                {FRAME_RATES.map((rate) => (
-                                    <option key={rate} value={rate}>{rate} FPS</option>
-                                ))}
-                            </select>
+                    <div className="mt-4 relative flex-1 flex flex-col justify-center min-h-[56px]">
+                        <div className={`text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 flex flex-col justify-center h-full ${fpsMode === 'manual' ? 'invisible' : ''}`}>
+                            <div>Current FPS: <strong className="text-black">{edlData.length > 0 ? fps : '-'}</strong></div>
+                            <div className="text-xs text-gray-400 mt-0.5">(Detects from EDL header or defaults to 24)</div>
                         </div>
-                    )}
-                    {fpsMode === 'auto' && (
-                        <div className="mt-4 text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                            Current FPS: <strong className="text-black">{fps}</strong> (Detects from EDL header or defaults to 24)
-                        </div>
-                    )}
+                        
+                        {fpsMode === 'manual' && (
+                            <div className="absolute inset-0 flex flex-col justify-center">
+                                <select className="w-full bg-gray-50 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 outline-none focus:ring-2 focus:ring-black" value={fps} onChange={(e) => setFps(Number(e.target.value))}>
+                                    {FRAME_RATES.map((rate) => (
+                                        <option key={rate} value={rate}>{rate} FPS</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div 
-                    className={`relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl transition-all duration-200 ${dragActive ? 'border-black bg-gray-50' : 'border-gray-300 bg-white hover:border-gray-400'}`}
+                    className={`min-w-0 relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl transition-all duration-200 ${dragActive ? 'border-black bg-gray-50' : 'border-gray-300 bg-white hover:border-gray-400'}`}
                     onDragEnter={handleDrag}
                     onDragLeave={handleDrag}
                     onDragOver={handleDrag}
@@ -2499,8 +2525,13 @@ const DurationFinder = () => {
             {edlData.length > 0 && !loading && (
                 <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-300">
                     <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                        <div className="text-xl font-black font-serif uppercase tracking-tight text-gray-900">
-                            Total Program Duration: <span className="text-black">{framesToTC(totalFrames, fps)}</span>
+                        <div>
+                            <div className="text-xl font-black font-serif uppercase tracking-tight text-gray-900">
+                                Total Program Duration: <span className="text-black">{framesToTC(totalFrames, fps)}</span>
+                            </div>
+                            {fileName && (
+                                <div className="text-sm text-gray-500 font-medium mt-1">Source: {fileName}</div>
+                            )}
                         </div>
                         <button onClick={handleDownloadCSV} className="flex items-center gap-2 bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-sm active:scale-95">
                             <Download size={16} /> Download CSV
@@ -2514,6 +2545,7 @@ const DurationFinder = () => {
                                 <thead className="bg-gray-100 text-gray-600 font-medium text-xs uppercase tracking-wider">
                                     <tr>
                                         <th className="p-3 border-b border-gray-200">Category Name</th>
+                                        <th className="p-3 border-b border-gray-200">Rule</th>
                                         <th className="p-3 border-b border-gray-200">Match String</th>
                                         <th className="p-3 border-b border-gray-200">Total Duration</th>
                                         <th className="p-3 border-b border-gray-200">% of Total</th>
@@ -2523,6 +2555,9 @@ const DurationFinder = () => {
                                     {patternStats.map(stat => (
                                         <tr key={stat.id} className="hover:bg-gray-50 transition-colors">
                                             <td className="p-3 font-medium">{stat.name}</td>
+                                            <td className="p-3 text-xs text-gray-500 whitespace-nowrap">
+                                                {stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains'}
+                                            </td>
                                             <td className="p-3 font-mono text-xs">{stat.matchString || '-'}</td>
                                             <td className="p-3 font-mono font-bold">{framesToTC(stat.pFrames, fps)}</td>
                                             <td className="p-3">
@@ -2543,7 +2578,9 @@ const DurationFinder = () => {
                         <div className="space-y-6">
                             {patternStats.map(stat => stat.pClips.length > 0 && (
                                 <div key={stat.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                                    <div className="bg-gray-100 p-3 font-bold text-gray-800 text-sm">{stat.name}</div>
+                                    <div className="bg-gray-100 p-3 font-bold text-gray-800 text-sm">
+                                        {stat.name} <span className="font-normal text-gray-500 ml-1">({stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains'} "{stat.matchString}")</span>
+                                    </div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left text-sm text-gray-700">
                                             <thead className="bg-gray-50 text-gray-500 font-medium text-xs tracking-wider">
@@ -2581,8 +2618,8 @@ const DurationFinder = () => {
 
 // --- MAIN APP ---
 
-const TOOLS = [
-  { id: "operator", title: "Duration Finder", icon: Users, desc: "Calculate screen time by matching camroll or clip names." },
+const TOOLS: Array<{id: string, title: string, shortTitle?: string, icon: any, desc: string}> = [
+  { id: "operator", title: "Screentime Duration", shortTitle: "Screentime Dur.", icon: Users, desc: "Calculate screen time by matching camroll or clip names." },
   { id: "tc", title: "Timecode Calc", icon: Calculator, desc: "Add, subtract, and convert timecodes." },
   { id: "zoom", title: "Zoom Calc", icon: Maximize, desc: "Calculate scaling % for mixed resolutions." },
   { id: "speed", title: "Speed Calc", icon: Gauge, desc: "Find speed ramp % or restore footage." },
@@ -2683,7 +2720,7 @@ const App = () => {
                         }`}
                     >
                         <t.icon size={18} />
-                        <span>{t.title}</span>
+                        <span>{t.shortTitle || t.title}</span>
                     </button>
                 ))}
             </nav>
@@ -2725,7 +2762,7 @@ const App = () => {
                                 }`}
                             >
                                 <t.icon size={18} />
-                                <span>{t.title}</span>
+                                <span>{t.shortTitle || t.title}</span>
                             </button>
                         ))}
                     </nav>
@@ -2738,7 +2775,7 @@ const App = () => {
             {activeToolId ? (
                 <div className={`
                     mx-auto p-6 lg:p-12
-                    ${['edl', 'avb', 'mxf'].includes(activeToolId) ? 'w-full max-w-full' : 'max-w-5xl'}
+                    ${['operator', 'edl', 'avb', 'mxf'].includes(activeToolId) ? 'w-full max-w-full' : 'max-w-5xl'}
                 `}>
                     {/* Tool Header */}
                     <div className="mb-10">

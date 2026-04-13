@@ -23,24 +23,32 @@ def tc_to_frames(tc: str, fps: float) -> int:
             parts[3])
 
 def detect_framerate(text: str) -> float:
-    if 'FCM: DROP FRAME' in text:
-        return 29.97
-
-    tc_regex = r'(\d{2}:\d{2}:\d{2}:\d{2})'
-    matches = re.findall(tc_regex, text)
+    # Find event lines to extract ONLY record timecodes (last two TC groups)
+    event_regex = re.compile(r'^\d+\s+\S+\s+\S+\s+\S+(?:.*?)\s+\d{2}:\d{2}:\d{2}:\d{2}\s+\d{2}:\d{2}:\d{2}:\d{2}\s+(\d{2}:\d{2}:\d{2}:\d{2})\s+(\d{2}:\d{2}:\d{2}:\d{2})', re.MULTILINE)
+    matches = event_regex.findall(text)
+    
     if not matches:
-        return 23.976
-
+        tc_regex = r'(\d{2}:\d{2}:\d{2}:\d{2})'
+        all_matches = re.findall(tc_regex, text)
+        if not all_matches:
+            return 24.0
+        matches = [(tc, tc) for tc in all_matches]
+        
     max_frame = 0
-    for match in matches:
-        frame = int(match[-2:])
-        if frame > max_frame:
-            max_frame = frame
+    for rec_in, rec_out in matches:
+        frame_in = int(rec_in[-2:])
+        frame_out = int(rec_out[-2:])
+        if frame_in > max_frame: max_frame = frame_in
+        if frame_out > max_frame: max_frame = frame_out
 
-    if max_frame > 50: return 60.0
+    if max_frame > 50: return 59.94
     if max_frame > 40: return 50.0
-    if max_frame > 25: return 29.97
+    if max_frame > 24: 
+        if 'FCM: DROP FRAME' in text:
+            return 29.97
+        return 29.97
     if max_frame > 24: return 25.0
+    
     return 23.976
 
 def parse(text: str, filename: str = None) -> List[Event]:
