@@ -46,8 +46,7 @@ def detect_framerate(text: str) -> float:
     return 24.0
 
 def parse(text: str, filename: str = None) -> List[Event]:
-    lines = text.split('
-')
+    lines = text.split('\n')
     clips: List[Event] = []
     current_clip_dict = {}
     
