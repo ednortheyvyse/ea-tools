@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask_cors import CORS
 import avb
 import os
 import pycmx
@@ -10,8 +11,11 @@ import csv
 import subprocess
 import json
 
+from backend.parsers import edl_parser
+
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), '..', 'dist'))
+CORS(app)
 
 def convert_cr_to_lf(filepath):
     """Converts CR-only line endings to LF."""
@@ -52,6 +56,45 @@ def to_json_serializable(obj):
         return str(obj.uuid)
     else:
         return obj
+
+@app.route("/api/edl/preview", methods=["POST"])
+def preview_edl():
+    if "files" not in request.files:
+        return jsonify({"error": "No files part"}), 400
+    
+    files = request.files.getlist("files")
+    options_str = request.form.get('options')
+    
+    if not files or all(f.filename == "" for f in files):
+        return jsonify({"error": "No selected files"}), 400
+
+    try:
+        options = json.loads(options_str) if options_str else {}
+        print("Received options:", options) # For debugging
+    except json.JSONDecodeError:
+        return jsonify({"error": "Invalid options format"}), 400
+
+    all_events = []
+    
+    for file in files:
+        if file:
+            try:
+                filename = secure_filename(file.filename)
+                content = file.stream.read().decode("utf-8")
+                
+                if filename.lower().endswith('.edl'):
+                    events = edl_parser.parse(content, filename)
+                    all_events.extend(events)
+                # Future parsers will go here
+
+            except Exception as e:
+                return jsonify({"error": f"Failed to process file {file.filename}: {str(e)}"}), 500
+    
+    # Placeholder for transformation logic
+    # transformed_events = apply_transformations(all_events, options)
+    
+    return jsonify([event.to_dict() for event in all_events])
+
 
 @app.route("/api/avb", methods=["POST"])
 def parse_avb():
