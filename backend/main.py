@@ -10,6 +10,7 @@ import io
 import csv
 import subprocess
 import json
+import chardet
 
 from parsers import edl_parser
 
@@ -80,7 +81,15 @@ def preview_edl():
         if file:
             try:
                 filename = secure_filename(file.filename)
-                content = file.stream.read().decode("utf-8")
+                raw_content = file.stream.read()
+                try:
+                    content = raw_content.decode("utf-8")
+                except UnicodeDecodeError:
+                    encoding = chardet.detect(raw_content)['encoding'] or 'utf-8'
+                    try:
+                        content = raw_content.decode(encoding)
+                    except UnicodeDecodeError:
+                        content = raw_content.decode("utf-8", errors="replace")
                 
                 if filename.lower().endswith('.edl'):
                     events = edl_parser.parse(content, filename)

@@ -24,6 +24,8 @@ import {
   Scale,
   List,
   Settings,
+  Users,
+  UserPlus,
 } from "lucide-react";
 
 // --- Types & Constants ---
@@ -679,7 +681,13 @@ const EDLHacker = () => {
       });
 
       if (!response.ok) {
-        const errData = await response.json();
+        const text = await response.text();
+        let errData;
+        try {
+            errData = JSON.parse(text);
+        } catch (e) {
+            errData = { error: text || `HTTP error! status: ${response.status}` };
+        }
         throw new Error(errData.error || `HTTP error! status: ${response.status}`);
       }
 
@@ -879,7 +887,7 @@ const EDLHacker = () => {
                             }}
                             className="w-28 bg-white px-2 py-1 border border-gray-300 rounded-md text-gray-900 font-mono text-xs focus:ring-2 focus:ring-black outline-none cursor-pointer"
                         >
-                            <option value="auto">Auto ({edlData.length > 0 ? (edlData[0]?.framerate || 24) : 24})</option>
+                            <option value="auto">Auto ({edlData.length > 0 ? (edlData[0]?.framerate || 24) : 24} fps)</option>
                             {FRAME_RATES.map((r) => (
                                 <option key={r} value={r}>{r} fps</option>
                             ))}
@@ -1182,18 +1190,23 @@ const AVBInspector = () => {
             xhr.onload = () => {
                 console.log("Upload complete.");
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    const data = JSON.parse(xhr.responseText);
-                    setAvbData(data);
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        setAvbData(data);
+                    } catch (e) {
+                        setError("Invalid JSON response from server.");
+                    }
                 } else {
-                    const err = JSON.parse(xhr.responseText);
-                    throw new Error(err.details || err.error || `HTTP error! status: ${xhr.status}`);
+                    let err;
+                    try { err = JSON.parse(xhr.responseText); } catch(e) { err = { error: xhr.responseText || `HTTP error! status: ${xhr.status}` }; }
+                    setError(err.details || err.error || `HTTP error! status: ${xhr.status}`);
                 }
                 setLoading(false);
             };
 
             xhr.onerror = () => {
                 console.error("Upload failed.");
-                setError("Upload failed.");
+                setError("Upload failed. Is the backend server running?");
                 setLoading(false);
             };
 
@@ -1719,18 +1732,23 @@ const MXFInspector = () => {
             xhr.onload = () => {
                 console.log("Upload complete.");
                 if (xhr.status >= 200 && xhr.status < 300) {
-                    const data = JSON.parse(xhr.responseText);
-                    setMxfData(data);
+                    try {
+                        const data = JSON.parse(xhr.responseText);
+                        setMxfData(data);
+                    } catch (e) {
+                        setError("Invalid JSON response from server.");
+                    }
                 } else {
-                    const err = JSON.parse(xhr.responseText);
-                    throw new Error(err.details || err.error || `HTTP error! status: ${xhr.status}`);
+                    let err;
+                    try { err = JSON.parse(xhr.responseText); } catch(e) { err = { error: xhr.responseText || `HTTP error! status: ${xhr.status}` }; }
+                    setError(err.details || err.error || `HTTP error! status: ${xhr.status}`);
                 }
                 setLoading(false);
             };
 
             xhr.onerror = () => {
                 console.error("Upload failed.");
-                setError("Upload failed.");
+                setError("Upload failed. Is the backend server running?");
                 setLoading(false);
             };
             
@@ -1886,7 +1904,13 @@ const AleConverter = () => {
 
     const handleSingleFileApiResponse = async (response: Response, successFileName: string) => {
         if (!response.ok) {
-            const err = await response.json();
+            const text = await response.text();
+            let err;
+            try {
+                err = JSON.parse(text);
+            } catch (e) {
+                err = { error: text || `HTTP error! status: ${response.status}` };
+            }
             throw new Error(err.details || err.error || `HTTP error! status: ${response.status}`);
         }
 
@@ -1905,7 +1929,13 @@ const AleConverter = () => {
 
     const handleMultiFileApiResponse = async (response: Response) => {
         if (!response.ok) {
-            const err = await response.json();
+            const text = await response.text();
+            let err;
+            try {
+                err = JSON.parse(text);
+            } catch (e) {
+                err = { error: text || `HTTP error! status: ${response.status}` };
+            }
             throw new Error(err.details || err.error || `HTTP error! status: ${response.status}`);
         }
 
@@ -2197,9 +2227,362 @@ const DNxComparer = () => {
     );
 };
 
+const DurationFinder = () => {
+  const [edlData, setEdlData] = useState<any[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const [fps, setFps] = useState<number>(() => {
+    try { const saved = localStorage.getItem('ea_durationFinder'); if (saved) return JSON.parse(saved).fps ?? 24; } catch (e) {}
+    return 24;
+  });
+
+  const [fpsMode, setFpsMode] = useState<'auto' | 'manual'>(() => {
+    try { const saved = localStorage.getItem('ea_durationFinder'); if (saved) return JSON.parse(saved).fpsMode ?? 'auto'; } catch (e) {}
+    return 'auto';
+  });
+
+  const [patterns, setPatterns] = useState<{ id: string, name: string, matchString: string }[]>(() => {
+    try { const saved = localStorage.getItem('ea_durationFinder'); if (saved && JSON.parse(saved).patterns) return JSON.parse(saved).patterns; } catch (e) {}
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('ea_durationFinder', JSON.stringify({ fpsMode, fps, patterns }));
+  }, [fpsMode, fps, patterns]);
+
+  const addPattern = () => {
+    setPatterns([...patterns, { id: crypto.randomUUID(), name: "New Category", matchString: "" }]);
+  };
+
+  const updatePattern = (id: string, field: 'name' | 'matchString', value: string) => {
+    setPatterns(patterns.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  const removePattern = (id: string) => {
+    setPatterns(patterns.filter(p => p.id !== id));
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      processFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    if (e.target.files && e.target.files[0]) {
+      processFile(e.target.files[0]);
+    }
+  };
+
+  const processFile = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.edl')) {
+      setError("Please upload a valid .edl file.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    setEdlData([]);
+
+    const formData = new FormData();
+    formData.append("files", file);
+
+    try {
+      const response = await fetch("/api/edl/preview", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+         const errData = await response.json().catch(() => null);
+         throw new Error(errData?.error || `Server error: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      if (data && data.length > 0) {
+        setEdlData(data);
+        if (fpsMode === 'auto') {
+            setFps(data[0]?.framerate || 24);
+        }
+      } else {
+        setEdlData([]);
+      }
+
+    } catch (err: any) {
+      setError(err.message || "Failed to parse EDL.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculations
+  const calculateResults = () => {
+      let totalFrames = 0;
+      for (const clip of edlData) {
+          if (clip.rec_in && clip.rec_out) {
+              totalFrames += tcToFrames(clip.rec_out, fps) - tcToFrames(clip.rec_in, fps);
+          }
+      }
+
+      const patternStats = patterns.map(p => {
+          let pFrames = 0;
+          const pClips = [];
+          if (p.matchString) {
+              for (const clip of edlData) {
+                  if (clip.reel && clip.reel.toLowerCase().includes(p.matchString.toLowerCase())) {
+                      const dur = tcToFrames(clip.rec_out, fps) - tcToFrames(clip.rec_in, fps);
+                      pFrames += dur;
+                      pClips.push({ ...clip, durationFrames: dur });
+                  }
+              }
+          }
+          return {
+              ...p,
+              pFrames,
+              pClips,
+              percentage: totalFrames > 0 ? (pFrames / totalFrames) * 100 : 0
+          };
+      }).sort((a, b) => b.percentage - a.percentage);
+
+      return { totalFrames, patternStats };
+  };
+
+  const { totalFrames, patternStats } = calculateResults();
+  
+  const handleDownloadCSV = () => {
+    if (edlData.length === 0) return;
+    
+    const rows = [];
+    rows.push(["Duration Summary"]);
+    rows.push(["Total Program Duration", framesToTC(totalFrames, fps)]);
+    rows.push([]);
+    rows.push(["Category Name", "Match String", "Total Duration", "% of Total Program Duration"]);
+    
+    for (const stat of patternStats) {
+        rows.push([stat.name, stat.matchString, framesToTC(stat.pFrames, fps), stat.percentage.toFixed(2) + "%"]);
+    }
+    
+    rows.push([]);
+    rows.push(["Detailed Breakdown"]);
+    
+    for (const stat of patternStats) {
+        if (stat.pClips.length > 0) {
+            rows.push([`--- ${stat.name} ---`]);
+            rows.push(["Camroll (Reel)", "Clip Name", "Duration", "% of Total"]);
+            for (const clip of stat.pClips) {
+                const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
+                rows.push([clip.reel || "", clip.clip_name || "", framesToTC(clip.durationFrames, fps), clipPct.toFixed(2) + "%"]);
+            }
+            rows.push([]);
+        }
+    }
+
+    const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", "duration_summary.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-6 w-full h-full">
+        <CollapsibleSection title={<><Users size={20} /> Manage Search Patterns</>} defaultOpen={true}>
+                <div className="p-4 space-y-4">
+                    {patterns.map((p, i) => (
+                        <div key={p.id} className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            <input
+                                type="text"
+                                placeholder="Category Name"
+                                value={p.name}
+                                onChange={(e) => updatePattern(p.id, 'name', e.target.value)}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black"
+                            />
+                            <input
+                                type="text"
+                                placeholder="Match String (e.g. A001)"
+                                value={p.matchString}
+                                onChange={(e) => updatePattern(p.id, 'matchString', e.target.value)}
+                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black"
+                            />
+                            <button onClick={() => removePattern(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-md">
+                                <Trash2 size={20} />
+                            </button>
+                        </div>
+                    ))}
+                    <button onClick={addPattern} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md font-medium text-sm transition-colors">
+                        <UserPlus size={16} /> Add Pattern
+                    </button>
+                </div>
+            </CollapsibleSection>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col justify-center">
+                    <h4 className="font-bold text-gray-800 mb-4">Timeline FPS</h4>
+                    <div className="flex gap-4">
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="radio" name="opFpsMode" className="form-radio text-black focus:ring-black" checked={fpsMode === 'auto'} onChange={() => setFpsMode('auto')} />
+                            <span>Auto-detect</span>
+                        </label>
+                        <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input type="radio" name="opFpsMode" className="form-radio text-black focus:ring-black" checked={fpsMode === 'manual'} onChange={() => setFpsMode('manual')} />
+                            <span>Manual</span>
+                        </label>
+                    </div>
+                    {fpsMode === 'manual' && (
+                        <div className="mt-4">
+                            <select className="w-full bg-gray-50 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 outline-none focus:ring-2 focus:ring-black" value={fps} onChange={(e) => setFps(Number(e.target.value))}>
+                                {FRAME_RATES.map((rate) => (
+                                    <option key={rate} value={rate}>{rate} FPS</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    {fpsMode === 'auto' && (
+                        <div className="mt-4 text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                            Current FPS: <strong className="text-black">{fps}</strong> (Detects from EDL header or defaults to 24)
+                        </div>
+                    )}
+                </div>
+
+                <div 
+                    className={`relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl transition-all duration-200 ${dragActive ? 'border-black bg-gray-50' : 'border-gray-300 bg-white hover:border-gray-400'}`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                >
+                    <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleChange} accept=".edl" />
+                    <UploadCloud className={`mb-3 ${dragActive ? 'text-black' : 'text-gray-400'}`} size={32} />
+                    <p className="text-sm font-medium text-gray-700">Drag & drop your .edl here</p>
+                    <p className="text-xs text-gray-400 mt-1">or click to browse</p>
+                </div>
+            </div>
+
+            {loading && (
+                <div className="p-12 text-center animate-pulse flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border-4 border-gray-200 border-t-black rounded-full animate-spin"></div>
+                    <p className="text-sm font-medium text-gray-500">Processing EDL...</p>
+                </div>
+            )}
+
+            {error && (
+                <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-medium flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-600 block"></span>
+                    {error}
+                </div>
+            )}
+
+            {edlData.length > 0 && !loading && (
+                <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-300">
+                    <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                        <div className="text-xl font-black font-serif uppercase tracking-tight text-gray-900">
+                            Total Program Duration: <span className="text-black">{framesToTC(totalFrames, fps)}</span>
+                        </div>
+                        <button onClick={handleDownloadCSV} className="flex items-center gap-2 bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-sm active:scale-95">
+                            <Download size={16} /> Download CSV
+                        </button>
+                    </div>
+                    
+                    <div className="p-4">
+                        <h3 className="font-bold text-gray-800 mb-4 uppercase text-xs tracking-wider">Summary Table</h3>
+                        <div className="overflow-x-auto rounded-lg border border-gray-200 mb-8">
+                            <table className="w-full text-left text-sm text-gray-700">
+                                <thead className="bg-gray-100 text-gray-600 font-medium text-xs uppercase tracking-wider">
+                                    <tr>
+                                        <th className="p-3 border-b border-gray-200">Category Name</th>
+                                        <th className="p-3 border-b border-gray-200">Match String</th>
+                                        <th className="p-3 border-b border-gray-200">Total Duration</th>
+                                        <th className="p-3 border-b border-gray-200">% of Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 bg-white">
+                                    {patternStats.map(stat => (
+                                        <tr key={stat.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="p-3 font-medium">{stat.name}</td>
+                                            <td className="p-3 font-mono text-xs">{stat.matchString || '-'}</td>
+                                            <td className="p-3 font-mono font-bold">{framesToTC(stat.pFrames, fps)}</td>
+                                            <td className="p-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-12 text-right">{stat.percentage.toFixed(2)}%</span>
+                                                    <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                                        <div className="h-full bg-black" style={{ width: `${stat.percentage}%` }}></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h3 className="font-bold text-gray-800 mb-4 uppercase text-xs tracking-wider">Detailed Breakdown</h3>
+                        <div className="space-y-6">
+                            {patternStats.map(stat => stat.pClips.length > 0 && (
+                                <div key={stat.id} className="border border-gray-200 rounded-lg overflow-hidden">
+                                    <div className="bg-gray-100 p-3 font-bold text-gray-800 text-sm">{stat.name}</div>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm text-gray-700">
+                                            <thead className="bg-gray-50 text-gray-500 font-medium text-xs tracking-wider">
+                                                <tr>
+                                                    <th className="p-2 border-b border-gray-200">Camroll (Reel)</th>
+                                                    <th className="p-2 border-b border-gray-200">Clip Name</th>
+                                                    <th className="p-2 border-b border-gray-200">Duration</th>
+                                                    <th className="p-2 border-b border-gray-200">% of Total</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100 bg-white font-mono text-xs">
+                                                {stat.pClips.map((clip, i) => {
+                                                    const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
+                                                    return (
+                                                        <tr key={i} className="hover:bg-gray-50">
+                                                            <td className="p-2">{clip.reel || '-'}</td>
+                                                            <td className="p-2 font-sans">{clip.clip_name || '-'}</td>
+                                                            <td className="p-2">{framesToTC(clip.durationFrames, fps)}</td>
+                                                            <td className="p-2">{clipPct.toFixed(2)}%</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+    </div>
+  );
+};
+
 // --- MAIN APP ---
 
 const TOOLS = [
+  { id: "operator", title: "Duration Finder", icon: Users, desc: "Calculate screen time by matching camroll or clip names." },
   { id: "tc", title: "Timecode Calc", icon: Calculator, desc: "Add, subtract, and convert timecodes." },
   { id: "zoom", title: "Zoom Calc", icon: Maximize, desc: "Calculate scaling % for mixed resolutions." },
   { id: "speed", title: "Speed Calc", icon: Gauge, desc: "Find speed ramp % or restore footage." },
@@ -2214,13 +2597,28 @@ const TOOLS = [
 ];
 
 const App = () => {
-  const [activeToolId, setActiveToolId] = useState<string | null>(null);
+  const [activeToolId, setActiveToolId] = useState<string | null>(() => {
+    try {
+        return localStorage.getItem('ea_activeToolId') || null;
+    } catch (e) {
+        return null;
+    }
+  });
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    if (activeToolId) {
+        localStorage.setItem('ea_activeToolId', activeToolId);
+    } else {
+        localStorage.removeItem('ea_activeToolId');
+    }
+  }, [activeToolId]);
 
   const activeTool = TOOLS.find(t => t.id === activeToolId);
 
   const renderTool = () => {
     switch (activeToolId) {
+      case "operator": return <DurationFinder />;
       case "tc": return <TimecodeCalculator />;
       case "zoom": return <ZoomCalculator />;
       case "speed": return <SpeedCalculator />;

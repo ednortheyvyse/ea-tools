@@ -25,13 +25,11 @@ def tc_to_frames(tc: str, fps: float) -> int:
 def detect_framerate(text: str) -> float:
     if 'FCM: DROP FRAME' in text:
         return 29.97
-    if 'FCM: NON-DROP FRAME' in text:
-        return 30.0
 
     tc_regex = r'(\d{2}:\d{2}:\d{2}:\d{2})'
     matches = re.findall(tc_regex, text)
     if not matches:
-        return 24.0
+        return 23.976
 
     max_frame = 0
     for match in matches:
@@ -43,7 +41,7 @@ def detect_framerate(text: str) -> float:
     if max_frame > 40: return 50.0
     if max_frame > 25: return 29.97
     if max_frame > 24: return 25.0
-    return 24.0
+    return 23.976
 
 def parse(text: str, filename: str = None) -> List[Event]:
     lines = text.split('\n')
