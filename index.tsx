@@ -579,55 +579,87 @@ const MaskGenerator = () => {
 
 // --- 5. EDL Hacker ---
 
+type TransformOptions = {
+  ignoreAudio: boolean;
+  ignoreMissingReel: boolean;
+  ignoreMissingName: boolean;
+  ignoreBlack: boolean;
+  ignoreAvidTemp: boolean;
+  sort: string;
+  locatorToClipName: boolean;
+  fileNameToTapeName: boolean;
+  mergeClips: boolean;
+  removeSuffix: boolean;
+  handles: number;
+};
+
+type ColumnVisibility = {
+  eventNum: boolean; track: boolean; reel: boolean; transition: boolean; srcIn: boolean; srcOut: boolean; srcDur: boolean; recIn: boolean; recOut: boolean; clipName: boolean; sourceFile: boolean;
+};
+
 const EDLHacker = () => {
   const [edlData, setEdlData] = useState<any[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'grouped'>('table');
-  const [fps, setFps] = useState<number>(24);
-  const [fpsMode, setFpsMode] = useState<'auto' | 'manual'>('auto');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [originalFiles, setOriginalFiles] = useState<File[]>([]);
 
-  const convertTC = (tc: string, originalFps: number, newFps: number) => {
-    if (!tc) return tc;
-    if (originalFps === newFps) return tc;
-    const frames = tcToFrames(tc, originalFps);
-    return framesToTC(frames, newFps);
-  };
-
-  type TransformOptions = {
-    ignoreAudio: boolean;
-    ignoreMissingReel: boolean;
-    ignoreMissingName: boolean;
-    ignoreBlack: boolean;
-    ignoreAvidTemp: boolean;
-    sort: string;
-    locatorToClipName: boolean;
-    fileNameToTapeName: boolean;
-    mergeClips: boolean;
-    removeSuffix: boolean;
-    handles: number;
-  };
-
-  const [options, setOptions] = useState<TransformOptions>({
-    ignoreAudio: false,
-    ignoreMissingReel: false,
-    ignoreMissingName: false,
-    ignoreBlack: true,
-    ignoreAvidTemp: true,
-    sort: 'original',
-    locatorToClipName: false,
-    fileNameToTapeName: false,
-    mergeClips: false,
-    removeSuffix: false,
-    handles: 0,
+  const [fps, setFps] = useState<number>(() => {
+    try { const saved = localStorage.getItem('edlHackerSettings'); if (saved) return JSON.parse(saved).fps ?? 24; } catch (e) {}
+    return 24;
   });
+  
+  const [fpsMode, setFpsMode] = useState<'auto' | 'manual'>(() => {
+    try { const saved = localStorage.getItem('edlHackerSettings'); if (saved) return JSON.parse(saved).fpsMode ?? 'auto'; } catch (e) {}
+    return 'auto';
+  });
+
+  const [options, setOptions] = useState<TransformOptions>(() => {
+    const defaultOptions = {
+        ignoreAudio: false,
+        ignoreMissingReel: false,
+        ignoreMissingName: false,
+        ignoreBlack: true,
+        ignoreAvidTemp: true,
+        sort: 'original',
+        locatorToClipName: false,
+        fileNameToTapeName: false,
+        mergeClips: false,
+        removeSuffix: false,
+        handles: 0,
+    };
+    try {
+        const saved = localStorage.getItem('edlHackerSettings');
+        if (saved && JSON.parse(saved).options) return { ...defaultOptions, ...JSON.parse(saved).options };
+    } catch (e) {}
+    return defaultOptions;
+  });
+
+  const [columns, setColumns] = useState<ColumnVisibility>(() => {
+    const defaultColumns = {
+        eventNum: true, track: true, reel: true, transition: true, srcIn: true, srcOut: true, srcDur: true, recIn: true, recOut: true, clipName: true, sourceFile: true
+    };
+    try {
+        const saved = localStorage.getItem('edlHackerSettings');
+        if (saved && JSON.parse(saved).columns) return { ...defaultColumns, ...JSON.parse(saved).columns };
+    } catch (e) {}
+    return defaultColumns;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('edlHackerSettings', JSON.stringify({ options, columns, fpsMode, fps }));
+  }, [options, columns, fpsMode, fps]);
 
   const handleOptionChange = (field: keyof TransformOptions, value: any) => {
     setOptions(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleFiles = async (files: FileList | null) => {
+  const handleColumnChange = (field: keyof ColumnVisibility, value: boolean) => {
+    setColumns(prev => ({ ...prev, [field]: value }));
+  };
+
+  const processFiles = async (files: File[], currentOptions: TransformOptions) => {
     if (!files || files.length === 0) return;
 
     setLoading(true);
@@ -638,7 +670,7 @@ const EDLHacker = () => {
     for (let i = 0; i < files.length; i++) {
         formData.append("files", files[i]);
     }
-    formData.append("options", JSON.stringify(options));
+    formData.append("options", JSON.stringify(currentOptions));
 
     try {
       const response = await fetch("/api/edl/preview", {
@@ -670,6 +702,19 @@ const EDLHacker = () => {
     }
   };
 
+  useEffect(() => {
+    if (originalFiles.length > 0) {
+      processFiles(originalFiles, options);
+    }
+  }, [options]);
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileArray = Array.from(files);
+    setOriginalFiles(fileArray);
+    processFiles(fileArray, options);
+  };
+
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -691,17 +736,38 @@ const EDLHacker = () => {
 
   const downloadCSV = () => {
     if (edlData.length === 0) return;
-    const headers = ["Event Num", "Track", "Reel", "Transition", "SRC IN", "SRC OUT", "Source Duration", "REC IN", "REC OUT", "Clip Name", "Source File"];
+    
+    const headerCols = [];
+    if (columns.eventNum) headerCols.push("Event Num");
+    if (columns.track) headerCols.push("Track");
+    if (columns.reel) headerCols.push("Reel");
+    if (columns.transition) headerCols.push("Transition");
+    if (columns.srcIn) headerCols.push("SRC IN");
+    if (columns.srcOut) headerCols.push("SRC OUT");
+    if (columns.srcDur) headerCols.push("Source Duration");
+    if (columns.recIn) headerCols.push("REC IN");
+    if (columns.recOut) headerCols.push("REC OUT");
+    if (columns.clipName) headerCols.push("Clip Name");
+    if (columns.sourceFile) headerCols.push("Source File");
+
     const csvContent = "data:text/csv;charset=utf-8," 
-        + headers.join(",") + "\n"
+        + headerCols.join(",") + "\n"
         + edlData.map(c => {
-            const src_in = convertTC(c.src_in, c.framerate, fps);
-            const src_out = convertTC(c.src_out, c.framerate, fps);
-            const rec_in = convertTC(c.rec_in, c.framerate, fps);
-            const rec_out = convertTC(c.rec_out, c.framerate, fps);
-            const srcDur = framesToTC(c.duration_frames || (tcToFrames(c.src_out, c.framerate) - tcToFrames(c.src_in, c.framerate)), fps);
-            return `${c.event_num},${c.track_type},${c.reel},${c.transition},${src_in},${src_out},${srcDur},${rec_in},${rec_out},"${c.clip_name || ''}","${c.source_file || ''}"`
+            const rowCols = [];
+            if (columns.eventNum) rowCols.push(c.event_num);
+            if (columns.track) rowCols.push(c.track_type);
+            if (columns.reel) rowCols.push(c.reel);
+            if (columns.transition) rowCols.push(c.transition);
+            if (columns.srcIn) rowCols.push(c.src_in);
+            if (columns.srcOut) rowCols.push(c.src_out);
+            if (columns.srcDur) rowCols.push(framesToTC(tcToFrames(c.src_out, fps) - tcToFrames(c.src_in, fps), fps));
+            if (columns.recIn) rowCols.push(c.rec_in);
+            if (columns.recOut) rowCols.push(c.rec_out);
+            if (columns.clipName) rowCols.push(`"${c.clip_name || ''}"`);
+            if (columns.sourceFile) rowCols.push(`"${c.source_file || ''}"`);
+            return rowCols.join(",");
         }).join("\n");
+        
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -835,7 +901,7 @@ const EDLHacker = () => {
               </div>
 
               <CollapsibleSection title={<><Settings size={20} /> Options</>} defaultOpen={true}>
-                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-8">
+                <div className="p-4 grid grid-cols-1 md:grid-cols-4 gap-8">
                     {/* Column 1: Filter */}
                     <div className="space-y-4">
                         <h4 className="font-bold text-gray-800">Filter</h4>
@@ -897,6 +963,22 @@ const EDLHacker = () => {
                             <input type="number" placeholder="0" className="w-full bg-white px-3 py-2 border border-gray-300 rounded-lg text-gray-900 font-mono text-sm focus:ring-2 focus:ring-black outline-none" value={options.handles} onChange={(e) => handleOptionChange('handles', parseInt(e.target.value, 10) || 0)} />
                         </div>
                     </div>
+
+                    {/* Column 4: Columns */}
+                    <div className="space-y-4">
+                        <h4 className="font-bold text-gray-800">Columns</h4>
+                        {Object.keys(columns).map((key) => (
+                            <label key={key} className="flex items-center gap-2 text-sm">
+                                <input 
+                                    type="checkbox" 
+                                    className="form-checkbox rounded text-black focus:ring-black" 
+                                    checked={columns[key as keyof ColumnVisibility]} 
+                                    onChange={(e) => handleColumnChange(key as keyof ColumnVisibility, e.target.checked)} 
+                                />
+                                <span className="capitalize">{key.replace(/([A-Z])/g, ' $1')}</span>
+                            </label>
+                        ))}
+                    </div>
                 </div>
               </CollapsibleSection>
 
@@ -906,44 +988,53 @@ const EDLHacker = () => {
                           <div key={gIdx} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-300">
                               <div className="bg-gray-100 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
                                   <span className="font-bold text-gray-800 flex items-center gap-2">
-                                      <span className="text-gray-400 text-xs uppercase tracking-wider font-bold">Event</span>
-                                      {group.id}
+                                      {columns.eventNum && <><span className="text-gray-400 text-xs uppercase tracking-wider font-bold">Event</span> {group.id}</>}
                                   </span>
+                                  {columns.track && (
                                   <span className="text-xs font-bold bg-white border border-gray-200 text-gray-600 px-2 py-1 rounded-md shadow-sm">
                                       Track: {group.track}
                                   </span>
+                                  )}
                               </div>
                               <div className="divide-y divide-gray-50">
                                   {group.clips.map((clip: any, cIdx: number) => (
                                       <div key={cIdx} className="p-4 flex flex-col lg:flex-row gap-4 lg:gap-6 items-start lg:items-center hover:bg-gray-50 transition-colors">
                                           <div className="flex-none flex flex-wrap gap-2 w-full lg:w-auto">
+                                              {(columns.srcIn || columns.srcOut) && (
                                               <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
                                                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Source</span>
-                                                  <div className="font-mono text-xs text-gray-600">{convertTC(clip.src_in, clip.framerate, fps)}</div>
-                                                  <div className="font-mono text-xs text-gray-600">{convertTC(clip.src_out, clip.framerate, fps)}</div>
+                                                  {columns.srcIn && <div className="font-mono text-xs text-gray-600">{clip.src_in}</div>}
+                                                  {columns.srcOut && <div className="font-mono text-xs text-gray-600">{clip.src_out}</div>}
                                               </div>
+                                              )}
+                                              {columns.srcDur && (
                                               <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
                                                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Src Duration</span>
-                                                  <div className="font-mono text-xs text-gray-900 font-medium">{framesToTC(clip.duration_frames, fps)}</div>
+                                                  <div className="font-mono text-xs text-gray-900 font-medium">{framesToTC(tcToFrames(clip.src_out, fps) - tcToFrames(clip.src_in, fps), fps)}</div>
                                               </div>
+                                              )}
+                                              {(columns.recIn || columns.recOut) && (
                                               <div className="bg-gray-50 border border-gray-100 rounded-md p-2 flex-1 lg:w-32">
                                                   <span className="block text-[10px] uppercase font-bold text-gray-400 mb-1 tracking-wider">Timeline</span>
-                                                  <div className="font-mono text-xs text-gray-900 font-medium">{convertTC(clip.rec_in, clip.framerate, fps)}</div>
-                                                  <div className="font-mono text-xs text-gray-900 font-medium">{convertTC(clip.rec_out, clip.framerate, fps)}</div>
+                                                  {columns.recIn && <div className="font-mono text-xs text-gray-900 font-medium">{clip.rec_in}</div>}
+                                                  {columns.recOut && <div className="font-mono text-xs text-gray-900 font-medium">{clip.rec_out}</div>}
                                               </div>
+                                              )}
                                           </div>
                                           <div className="flex-1 min-w-0 w-full">
-                                              <div className="font-bold text-gray-900 truncate text-base">{clip.clip_name || clip.source_file || 'Unnamed Clip'}</div>
+                                              {columns.clipName && <div className="font-bold text-gray-900 truncate text-base">{clip.clip_name || (columns.sourceFile ? '' : clip.source_file) || 'Unnamed Clip'}</div>}
                                               <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-2">
-                                                  <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-mono">Reel: {clip.reel}</span>
-                                                  {clip.source_file && <span className="truncate">File: {clip.source_file}</span>}
+                                                  {columns.reel && <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 font-mono">Reel: {clip.reel}</span>}
+                                                  {columns.sourceFile && clip.source_file && <span className="truncate">File: {clip.source_file}</span>}
                                               </div>
                                           </div>
+                                          {columns.transition && (
                                           <div className="flex-none w-36 lg:text-right">
                                               <span className={`text-xs font-bold px-2.5 py-1.5 rounded-md border inline-block 'bg-gray-50 text-gray-700 border-gray-200'`}>
                                                   {clip.transition}
                                               </span>
                                           </div>
+                                          )}
                                       </div>
                                   ))}
                               </div>
@@ -955,33 +1046,33 @@ const EDLHacker = () => {
                     <table className="w-full text-left text-sm text-gray-700 border-collapse">
                         <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0 z-10 text-xs uppercase tracking-wider shadow-sm">
                             <tr>
-                                <th className="p-4 border-b border-gray-200">Event #</th>
-                                <th className="p-4 border-b border-gray-200">Track</th>
-                                <th className="p-4 border-b border-gray-200">Reel</th>
-                                <th className="p-4 border-b border-gray-200">Transition</th>
-                                <th className="p-4 border-b border-gray-200">SRC IN</th>
-                                <th className="p-4 border-b border-gray-200">SRC OUT</th>
-                                <th className="p-4 border-b border-gray-200">SRC DUR</th>
-                                <th className="p-4 border-b border-gray-200">REC IN</th>
-                                <th className="p-4 border-b border-gray-200">REC OUT</th>
-                                <th className="p-4 border-b border-gray-200">Clip Name</th>
-                                <th className="p-4 border-b border-gray-200">Source File</th>
+                                {columns.eventNum && <th className="p-4 border-b border-gray-200">Event #</th>}
+                                {columns.track && <th className="p-4 border-b border-gray-200">Track</th>}
+                                {columns.reel && <th className="p-4 border-b border-gray-200">Reel</th>}
+                                {columns.transition && <th className="p-4 border-b border-gray-200">Transition</th>}
+                                {columns.srcIn && <th className="p-4 border-b border-gray-200">SRC IN</th>}
+                                {columns.srcOut && <th className="p-4 border-b border-gray-200">SRC OUT</th>}
+                                {columns.srcDur && <th className="p-4 border-b border-gray-200">SRC DUR</th>}
+                                {columns.recIn && <th className="p-4 border-b border-gray-200">REC IN</th>}
+                                {columns.recOut && <th className="p-4 border-b border-gray-200">REC OUT</th>}
+                                {columns.clipName && <th className="p-4 border-b border-gray-200">Clip Name</th>}
+                                {columns.sourceFile && <th className="p-4 border-b border-gray-200">Source File</th>}
                             </tr>
                         </thead>
                         <tbody className="font-mono text-xs divide-y divide-gray-100">
                             {edlData.map((clip, i) => (
                                 <tr key={i} className="hover:bg-gray-50 transition-colors">
-                                    <td className="p-4 text-gray-500">{clip.event_num}</td>
-                                    <td className="p-4">{clip.track_type}</td>
-                                    <td className="p-4">{clip.reel}</td>
-                                    <td className="p-4 font-medium text-gray-900">{clip.transition}</td>
-                                    <td className="p-4">{convertTC(clip.src_in, clip.framerate, fps)}</td>
-                                    <td className="p-4">{convertTC(clip.src_out, clip.framerate, fps)}</td>
-                                    <td className="p-4 font-bold text-gray-900">{framesToTC(clip.duration_frames, fps)}</td>
-                                    <td className="p-4">{convertTC(clip.rec_in, clip.framerate, fps)}</td>
-                                    <td className="p-4">{convertTC(clip.rec_out, clip.framerate, fps)}</td>
-                                    <td className="p-4 font-medium font-sans text-gray-900">{clip.clip_name}</td>
-                                    <td className="p-4 font-medium font-sans text-gray-500">{clip.source_file}</td>
+                                    {columns.eventNum && <td className="p-4 text-gray-500">{clip.event_num}</td>}
+                                    {columns.track && <td className="p-4">{clip.track_type}</td>}
+                                    {columns.reel && <td className="p-4">{clip.reel}</td>}
+                                    {columns.transition && <td className="p-4 font-medium text-gray-900">{clip.transition}</td>}
+                                    {columns.srcIn && <td className="p-4">{clip.src_in}</td>}
+                                    {columns.srcOut && <td className="p-4">{clip.src_out}</td>}
+                                    {columns.srcDur && <td className="p-4 font-bold text-gray-900">{framesToTC(tcToFrames(clip.src_out, fps) - tcToFrames(clip.src_in, fps), fps)}</td>}
+                                    {columns.recIn && <td className="p-4">{clip.rec_in}</td>}
+                                    {columns.recOut && <td className="p-4">{clip.rec_out}</td>}
+                                    {columns.clipName && <td className="p-4 font-medium font-sans text-gray-900">{clip.clip_name}</td>}
+                                    {columns.sourceFile && <td className="p-4 font-medium font-sans text-gray-500">{clip.source_file}</td>}
                                 </tr>
                             ))}
                         </tbody>
