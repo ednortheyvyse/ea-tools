@@ -584,7 +584,7 @@ const EDLHacker = () => {
   const [dragActive, setDragActive] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'grouped'>('table');
   const [fps, setFps] = useState<number>(24);
-  const [fpsTouched, setFpsTouched] = useState<boolean>(false);
+  const [fpsMode, setFpsMode] = useState<'auto' | 'manual'>('auto');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -641,7 +641,7 @@ const EDLHacker = () => {
     formData.append("options", JSON.stringify(options));
 
     try {
-      const response = await fetch("http://127.0.0.1:5001/api/edl/preview", {
+      const response = await fetch("/api/edl/preview", {
         method: "POST",
         body: formData,
       });
@@ -655,7 +655,7 @@ const EDLHacker = () => {
       if (data && data.length > 0) {
         setEdlData(data);
         // Set FPS from the first clip of the first file, assuming they are consistent
-        if (!fpsTouched) {
+        if (fpsMode === 'auto') {
             setFps(data[0]?.framerate || 24);
         }
       } else {
@@ -762,13 +762,19 @@ const EDLHacker = () => {
                     <div className="mb-6 flex flex-col items-center gap-2 z-10 relative">
                         <label className="text-sm font-bold text-gray-500 uppercase tracking-wide">Timeline FPS</label>
                         <select
-                            value={fps}
+                            value={fpsMode === 'auto' ? 'auto' : fps}
                             onChange={(e) => {
-                                setFps(Number(e.target.value));
-                                setFpsTouched(true);
+                                const val = e.target.value;
+                                if (val === 'auto') {
+                                    setFpsMode('auto');
+                                } else {
+                                    setFpsMode('manual');
+                                    setFps(Number(val));
+                                }
                             }}
                             className="bg-white border border-gray-300 rounded-lg px-4 py-2 text-gray-900 text-lg font-mono focus:ring-2 focus:ring-black outline-none shadow-sm cursor-pointer"
                         >
+                            <option value="auto">Auto Detect</option>
                             {FRAME_RATES.map((r) => (
                                 <option key={r} value={r}>{r} fps</option>
                             ))}
@@ -794,13 +800,20 @@ const EDLHacker = () => {
                      <div className="flex items-center gap-2">
                         <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">FPS</label>
                         <select 
-                            value={fps} 
+                            value={fpsMode === 'auto' ? 'auto' : fps} 
                             onChange={(e) => {
-                                setFps(Number(e.target.value));
-                                setFpsTouched(true);
+                                const val = e.target.value;
+                                if (val === 'auto') {
+                                    setFpsMode('auto');
+                                    if (edlData.length > 0) setFps(edlData[0]?.framerate || 24);
+                                } else {
+                                    setFpsMode('manual');
+                                    setFps(Number(val));
+                                }
                             }}
-                            className="w-24 bg-white px-2 py-1 border border-gray-300 rounded-md text-gray-900 font-mono text-xs focus:ring-2 focus:ring-black outline-none cursor-pointer"
+                            className="w-28 bg-white px-2 py-1 border border-gray-300 rounded-md text-gray-900 font-mono text-xs focus:ring-2 focus:ring-black outline-none cursor-pointer"
                         >
+                            <option value="auto">Auto ({edlData.length > 0 ? (edlData[0]?.framerate || 24) : 24})</option>
                             {FRAME_RATES.map((r) => (
                                 <option key={r} value={r}>{r} fps</option>
                             ))}
