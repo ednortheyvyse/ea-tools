@@ -8,6 +8,7 @@ const DNX_HD_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '36 Mbps (1080p24)',
     },
     { 
         legacy: 'DNxHD 60/75/115/145', 
@@ -16,6 +17,7 @@ const DNX_HD_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '115 Mbps (1080p24)',
     },
     { 
         legacy: 'DNxHD 90/100/120/175/185/220', 
@@ -24,6 +26,7 @@ const DNX_HD_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '175 Mbps (1080p24)',
     },
     { 
         legacy: 'DNxHD 175x/185x/220x', 
@@ -32,6 +35,7 @@ const DNX_HD_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '175 Mbps (1080p24)',
     },
     { 
         legacy: 'DNxHD 365x/440x', 
@@ -40,6 +44,7 @@ const DNX_HD_DATA = [
         chroma: '4:4:4',
         colorSpace: 'RGB or YUV',
         alpha: 'Yes',
+        dataRate: '365 Mbps (1080p24)',
     },
 ];
 
@@ -51,6 +56,7 @@ const DNX_HR_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '145 Mbps (UHD 24p)',
     },
     { 
         legacy: 'DNxHD 60/75/115/145', 
@@ -59,6 +65,7 @@ const DNX_HR_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '290 Mbps (UHD 24p)',
     },
     { 
         legacy: 'DNxHD 90/100/120/175/185/220', 
@@ -67,6 +74,7 @@ const DNX_HR_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '440 Mbps (UHD 24p)',
     },
     { 
         legacy: 'DNxHD 175x/185x/220x', 
@@ -75,6 +83,7 @@ const DNX_HR_DATA = [
         chroma: '4:2:2',
         colorSpace: 'YUV',
         alpha: 'No',
+        dataRate: '440 Mbps (UHD 24p)',
     },
     { 
         legacy: 'DNxHD 365x/440x', 
@@ -83,6 +92,7 @@ const DNX_HR_DATA = [
         chroma: '4:4:4',
         colorSpace: 'RGB or YUV',
         alpha: 'Yes',
+        dataRate: '880 Mbps (UHD 24p)',
     },
 ];
 
@@ -95,6 +105,7 @@ const CodecTable = ({ data }) => (
                     <tr>
                         <th className="p-4 align-top">Legacy Name</th>
                         <th className="p-4 align-top">Modern Equivalent</th>
+                        <th className="p-4 align-top">Data Rate (approx)</th>
                         <th className="p-4 align-top">Bit Depth</th>
                         <th className="p-4 align-top">Chroma</th>
                         <th className="p-4 align-top">Color Space</th>
@@ -106,6 +117,7 @@ const CodecTable = ({ data }) => (
                         <tr key={i} className="hover:bg-gray-50">
                             <td className="p-4 align-top font-mono text-xs">{codec.legacy}</td>
                             <td className="p-4 align-top font-mono text-xs font-bold">{codec.modern}</td>
+                            <td className="p-4 align-top text-xs text-gray-600 whitespace-nowrap">{codec.dataRate}</td>
                             <td className="p-4 align-top">{codec.bitDepth}-bit</td>
                             <td className="p-4 align-top font-mono text-xs">{codec.chroma}</td>
                             <td className="p-4 align-top font-mono text-xs">{codec.colorSpace}</td>
