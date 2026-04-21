@@ -2174,6 +2174,57 @@ const DNX_HR_DATA = [
     },
 ];
 
+const PRORES_DATA = [
+    {
+        legacy: 'ProRes Proxy',
+        modern: 'Apple ProRes Proxy',
+        bitDepth: '10',
+        chroma: '4:2:0',
+        colorSpace: 'YUV',
+        alpha: 'No',
+    },
+    {
+        legacy: 'ProRes LT',
+        modern: 'Apple ProRes LT',
+        bitDepth: '10',
+        chroma: '4:2:2',
+        colorSpace: 'YUV',
+        alpha: 'No',
+    },
+    {
+        legacy: 'ProRes 422',
+        modern: 'Apple ProRes 422',
+        bitDepth: '10',
+        chroma: '4:2:2',
+        colorSpace: 'YUV',
+        alpha: 'No',
+    },
+    {
+        legacy: 'ProRes HQ',
+        modern: 'Apple ProRes 422 HQ',
+        bitDepth: '10',
+        chroma: '4:2:2',
+        colorSpace: 'YUV',
+        alpha: 'No',
+    },
+    {
+        legacy: 'ProRes 4444',
+        modern: 'Apple ProRes 4444',
+        bitDepth: '12',
+        chroma: '4:4:4',
+        colorSpace: 'RGB or YUV',
+        alpha: 'Yes',
+    },
+    {
+        legacy: 'ProRes 4444 XQ',
+        modern: 'Apple ProRes 4444 XQ',
+        bitDepth: '12',
+        chroma: '4:4:4',
+        colorSpace: 'RGB or YUV',
+        alpha: 'Yes',
+    },
+];
+
 const CodecTable = ({ data }: { data: typeof DNX_HD_DATA }) => (
     <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -2205,19 +2256,25 @@ const CodecTable = ({ data }: { data: typeof DNX_HD_DATA }) => (
     </div>
 );
 
-const DNxComparer = () => {
+const LegacyCodecComparer = () => {
     return (
         <div className="space-y-8 max-w-5xl mx-auto">
             <div>
-                <h2 className="text-lg font-bold text-gray-800 mb-2">1080 (HD) Resolution</h2>
+                <h2 className="text-lg font-bold text-gray-800 mb-2">Avid DNxHD (1080/HD)</h2>
                 <p className="text-sm text-gray-600 mb-4">For HD resolutions, you can use both the older DNxHD codecs and the modern DNxHR codecs.</p>
                 <CodecTable data={DNX_HD_DATA} />
             </div>
 
             <div>
-                <h2 className="text-lg font-bold text-gray-800 mb-2">2K / UHD / 4K+ Resolutions</h2>
+                <h2 className="text-lg font-bold text-gray-800 mb-2">Avid DNxHR (2K / UHD / 4K+)</h2>
                 <p className="text-sm text-gray-600 mb-4">For resolutions higher than HD, only the DNxHR codecs are supported.</p>
                 <CodecTable data={DNX_HR_DATA} />
+            </div>
+
+            <div>
+                <h2 className="text-lg font-bold text-gray-800 mb-2">Apple ProRes</h2>
+                <p className="text-sm text-gray-600 mb-4">Commonly used Apple ProRes codecs and their specifications.</p>
+                <CodecTable data={PRORES_DATA} />
             </div>
 
             <div className="text-xs text-gray-500 p-4 bg-gray-50 border border-gray-200 rounded-lg text-center">
@@ -2630,7 +2687,7 @@ const TOOLS: Array<{id: string, title: string, shortTitle?: string, icon: any, d
   { id: "mxf", title: "MXF Inspector", icon: FileScan, desc: "Probe technical metadata of MXF files." },
   { id: "data", title: "Data Rate", icon: HardDrive, desc: "Estimate storage needs for shoots." },
   { id: "guess", title: "Dur. Guess", icon: Hourglass, desc: "How much footage fits on this drive?" },
-  { id: "dnx", title: "DNx Comparer", icon: Scale, desc: "Compare storage for Avid DNx codecs." },
+  { id: "codec", title: "Codec Comparer", icon: Scale, desc: "Compare specifications for legacy and modern codecs." },
 ];
 
 const App = () => {
@@ -2666,7 +2723,7 @@ const App = () => {
       case "mxf": return <MXFInspector />;
       case "data": return <DataRateCalculator />;
       case "guess": return <DurationGuesstimator />;
-      case "dnx": return <DNxComparer />;
+      case "codec": return <LegacyCodecComparer />;
       default: return null;
     }
   };
