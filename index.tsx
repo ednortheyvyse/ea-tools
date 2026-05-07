@@ -2324,11 +2324,6 @@ const DurationFinder = () => {
     return 24;
   });
 
-  const [fpsMode, setFpsMode] = useState<'auto' | 'manual'>(() => {
-    try { const saved = localStorage.getItem('ea_durationFinder'); if (saved) return JSON.parse(saved).fpsMode ?? 'auto'; } catch (e) {}
-    return 'auto';
-  });
-
   const [rules, setRules] = useState<{ id: string, logicalOp: string, field: string, operator: string, value: string }[]>(() => {
     try { 
         const saved = localStorage.getItem('ea_durationFinder'); 
@@ -2348,8 +2343,8 @@ const DurationFinder = () => {
   });
 
   useEffect(() => {
-    localStorage.setItem('ea_durationFinder', JSON.stringify({ fpsMode, fps, rules }));
-  }, [fpsMode, fps, rules]);
+    localStorage.setItem('ea_durationFinder', JSON.stringify({ fps, rules }));
+  }, [fps, rules]);
 
   const addRule = () => {
     setRules([...rules, { id: crypto.randomUUID(), logicalOp: 'and', field: 'any', operator: 'contains', value: "" }]);
@@ -2421,9 +2416,6 @@ const DurationFinder = () => {
 
       if (data && data.length > 0) {
         setEdlData(data);
-        if (fpsMode === 'auto') {
-            setFps(data[0]?.framerate || 24);
-        }
       } else {
         setEdlData([]);
       }
@@ -2611,32 +2603,12 @@ const DurationFinder = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="min-w-0 bg-white border border-gray-200 rounded-xl p-6 shadow-sm flex flex-col justify-center min-h-[160px]">
                     <h4 className="font-bold text-gray-800 mb-4">Timeline FPS</h4>
-                    <div className="flex gap-4">
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input type="radio" name="opFpsMode" className="form-radio text-black focus:ring-black" checked={fpsMode === 'auto'} onChange={() => setFpsMode('auto')} />
-                            <span>Auto-detect</span>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input type="radio" name="opFpsMode" className="form-radio text-black focus:ring-black" checked={fpsMode === 'manual'} onChange={() => setFpsMode('manual')} />
-                            <span>Manual</span>
-                        </label>
-                    </div>
-                    <div className="mt-4 relative flex-1 flex flex-col justify-center min-h-[56px]">
-                        <div className={`text-sm text-gray-500 bg-gray-50 p-3 rounded-lg border border-gray-100 flex flex-col justify-center h-full ${fpsMode === 'manual' ? 'invisible' : ''}`}>
-                            <div>Current FPS: <strong className="text-black">{edlData.length > 0 ? fps : '-'}</strong></div>
-                            <div className="text-xs text-gray-400 mt-0.5">(Detects from EDL header or defaults to 24)</div>
-                        </div>
-                        
-                        {fpsMode === 'manual' && (
-                            <div className="absolute inset-0 flex flex-col justify-center">
-                                <select className="w-full bg-gray-50 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 outline-none focus:ring-2 focus:ring-black" value={fps} onChange={(e) => setFps(Number(e.target.value))}>
-                                    {FRAME_RATES.map((rate) => (
-                                        <option key={rate} value={rate}>{rate} FPS</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-                    </div>
+                    <select className="w-full bg-gray-50 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 outline-none focus:ring-2 focus:ring-black" value={fps} onChange={(e) => setFps(Number(e.target.value))}>
+                        {FRAME_RATES.map((rate) => (
+                            <option key={rate} value={rate}>{rate} FPS</option>
+                        ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-2">Ensure this matches your EDL's framerate for accurate duration calculations.</p>
                 </div>
 
                 <div 
