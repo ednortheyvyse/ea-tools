@@ -2302,6 +2302,16 @@ const LegacyCodecComparer = () => {
     );
 };
 
+const testOperator = (str: string, op: string, val: string) => {
+    switch (op) {
+        case 'contains': return str.includes(val);
+        case 'not_contains': return !str.includes(val);
+        case 'is': return str === val;
+        case 'is_not': return str !== val;
+        default: return false;
+    }
+};
+
 const DurationFinder = () => {
   const [edlData, setEdlData] = useState<any[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -2319,31 +2329,38 @@ const DurationFinder = () => {
     return 'auto';
   });
 
-  const [patterns, setPatterns] = useState<{ id: string, name: string, matchString: string, matchType: 'contains' | 'not_contains' }[]>(() => {
+  const [rules, setRules] = useState<{ id: string, logicalOp: string, field: string, operator: string, value: string }[]>(() => {
     try { 
         const saved = localStorage.getItem('ea_durationFinder'); 
-        if (saved && JSON.parse(saved).patterns) {
-            return JSON.parse(saved).patterns.map((p: any) => ({ ...p, matchType: p.matchType || 'contains' }));
+        if (saved && JSON.parse(saved).rules) {
+            return JSON.parse(saved).rules;
+        } else if (saved && JSON.parse(saved).patterns) {
+            return JSON.parse(saved).patterns.map((p: any, i: number) => ({ 
+                id: p.id || crypto.randomUUID(), 
+                logicalOp: i === 0 ? 'and' : 'or', 
+                field: 'any', 
+                operator: p.matchType || 'contains', 
+                value: p.matchString || '' 
+            }));
         }
     } catch (e) {}
     return [];
   });
 
   useEffect(() => {
-    localStorage.setItem('ea_durationFinder', JSON.stringify({ fpsMode, fps, patterns }));
-  }, [fpsMode, fps, patterns]);
+    localStorage.setItem('ea_durationFinder', JSON.stringify({ fpsMode, fps, rules }));
+  }, [fpsMode, fps, rules]);
 
-  const addPattern = () => {
-    const lastPatternName = patterns.length > 0 ? patterns[patterns.length - 1].name : "New Category";
-    setPatterns([...patterns, { id: crypto.randomUUID(), name: lastPatternName, matchString: "", matchType: 'contains' }]);
+  const addRule = () => {
+    setRules([...rules, { id: crypto.randomUUID(), logicalOp: 'and', field: 'any', operator: 'contains', value: "" }]);
   };
 
-  const updatePattern = (id: string, field: 'name' | 'matchString' | 'matchType', value: string) => {
-    setPatterns(patterns.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const updateRule = (id: string, field: string, value: string) => {
+    setRules(rules.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
 
-  const removePattern = (id: string) => {
-    setPatterns(patterns.filter(p => p.id !== id));
+  const removeRule = (id: string) => {
+    setRules(rules.filter(r => r.id !== id));
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -2427,36 +2444,57 @@ const DurationFinder = () => {
           }
       }
 
-      const patternStats = patterns.map(p => {
-          let pFrames = 0;
-          const pClips = [];
-          if (p.matchString) {
-              const lowerMatch = p.matchString.toLowerCase();
-              for (const clip of edlData) {
-                  const matchReel = clip.reel && clip.reel.toLowerCase().includes(lowerMatch);
-                  const matchName = clip.clip_name && clip.clip_name.toLowerCase().includes(lowerMatch);
-                  const hasMatch = matchReel || matchName;
-                  const isMatch = p.matchType === 'not_contains' ? !hasMatch : hasMatch;
+      let matchFrames = 0;
+      const matchedClips: any[] = [];
+
+      if (rules.length > 0 && rules.some(r => r.value.trim() !== '')) {
+          for (const clip of edlData) {
+              let isMatch = false;
+              let hasEvaluatedFirst = false;
+
+              for (let i = 0; i < rules.length; i++) {
+                  const r = rules[i];
+                  if (!r.value.trim()) continue;
+
+                  const lowerVal = r.value.toLowerCase();
+                  const reelStr = (clip.reel || "").toLowerCase();
+                  const nameStr = (clip.clip_name || "").toLowerCase();
                   
-                  if (isMatch) {
-                      const dur = tcToFrames(clip.rec_out, fps) - tcToFrames(clip.rec_in, fps);
-                      pFrames += dur;
-                      pClips.push({ ...clip, durationFrames: dur });
+                  let fieldMatch = false;
+                  if (r.field === 'any') {
+                      fieldMatch = testOperator(reelStr, r.operator, lowerVal) || testOperator(nameStr, r.operator, lowerVal);
+                  } else if (r.field === 'reel') {
+                      fieldMatch = testOperator(reelStr, r.operator, lowerVal);
+                  } else if (r.field === 'clip_name') {
+                      fieldMatch = testOperator(nameStr, r.operator, lowerVal);
+                  }
+
+                  if (!hasEvaluatedFirst) {
+                      isMatch = fieldMatch;
+                      hasEvaluatedFirst = true;
+                  } else {
+                      if (r.logicalOp === 'and') {
+                          isMatch = isMatch && fieldMatch;
+                      } else {
+                          isMatch = isMatch || fieldMatch;
+                      }
                   }
               }
-          }
-          return {
-              ...p,
-              pFrames,
-              pClips,
-              percentage: totalFrames > 0 ? (pFrames / totalFrames) * 100 : 0
-          };
-      }).sort((a, b) => b.percentage - a.percentage);
 
-      return { totalFrames, patternStats };
+              if (isMatch) {
+                  const dur = tcToFrames(clip.rec_out, fps) - tcToFrames(clip.rec_in, fps);
+                  matchFrames += dur;
+                  matchedClips.push({ ...clip, durationFrames: dur });
+              }
+          }
+      }
+
+      const matchPercentage = totalFrames > 0 ? (matchFrames / totalFrames) * 100 : 0;
+
+      return { totalFrames, matchFrames, matchedClips, matchPercentage };
   };
 
-  const { totalFrames, patternStats } = calculateResults();
+  const { totalFrames, matchFrames, matchedClips, matchPercentage } = calculateResults();
   
   const handleDownloadCSV = () => {
     if (edlData.length === 0) return;
@@ -2466,26 +2504,34 @@ const DurationFinder = () => {
     rows.push(["Total Program Duration", framesToTC(totalFrames, fps)]);
     rows.push(["Timeline FPS", fps]);
     rows.push([]);
-    rows.push(["Category Name", "Rule", "Match String", "Total Duration", "% of Total Program Duration"]);
+    rows.push(["Search Criteria"]);
+    rows.push(["And/Or", "Criteria", "Operator", "Value"]);
     
-    for (const stat of patternStats) {
-        rows.push([stat.name, stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains', stat.matchString, framesToTC(stat.pFrames, fps), stat.percentage.toFixed(2) + "%"]);
+    const validRules = rules.filter(r => r.value.trim() !== '');
+    for (let i = 0; i < validRules.length; i++) {
+        const r = validRules[i];
+        const logic = i === 0 ? '' : r.logicalOp.toUpperCase();
+        const fieldStr = r.field === 'any' ? 'Any Field' : r.field === 'clip_name' ? 'Clip Name' : 'Reel';
+        const opStr = r.operator.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        rows.push([logic, fieldStr, opStr, r.value]);
     }
+    
+    rows.push([]);
+    rows.push(["Search Results"]);
+    rows.push(["Matched Duration", framesToTC(matchFrames, fps)]);
+    rows.push(["% of Total Program", matchPercentage.toFixed(2) + "%"]);
     
     rows.push([]);
     rows.push(["Detailed Breakdown"]);
     
-    for (const stat of patternStats) {
-        if (stat.pClips.length > 0) {
-            const ruleText = stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains';
-            rows.push([`--- ${stat.name} (${ruleText} "${stat.matchString}") ---`]);
-            rows.push(["Camroll (Reel)", "Clip Name", "Duration", "% of Total"]);
-            for (const clip of stat.pClips) {
-                const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
-                rows.push([clip.reel || "", clip.clip_name || "", framesToTC(clip.durationFrames, fps), clipPct.toFixed(2) + "%"]);
-            }
-            rows.push([]);
+    if (matchedClips.length > 0) {
+        rows.push(["Camroll (Reel)", "Clip Name", "Duration", "% of Total"]);
+        for (const clip of matchedClips) {
+            const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
+            rows.push([clip.reel || "", clip.clip_name || "", framesToTC(clip.durationFrames, fps), clipPct.toFixed(2) + "%"]);
         }
+    } else {
+        rows.push(["No clips matched the search criteria."]);
     }
 
     const csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -2493,7 +2539,7 @@ const DurationFinder = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", "duration_summary.csv");
+    link.setAttribute("download", "advanced_duration_summary.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2501,39 +2547,63 @@ const DurationFinder = () => {
 
   return (
     <div className="space-y-6 w-full h-full">
-        <CollapsibleSection title={<><Search size={20} /> Manage Search Patterns</>} defaultOpen={true}>
+        <CollapsibleSection title={<><Search size={20} /> Manage Search Criteria</>} defaultOpen={true}>
                 <div className="p-4 space-y-4">
-                    {patterns.map((p, i) => (
-                        <div key={p.id} className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
-                            <input
-                                type="text"
-                                placeholder="Category Name"
-                                value={p.name}
-                                onChange={(e) => updatePattern(p.id, 'name', e.target.value)}
-                                className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black text-sm"
-                            />
+                    {rules.map((r, i) => (
+                        <div key={r.id} className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            <div className="w-20 shrink-0">
+                                {i > 0 ? (
+                                    <select
+                                        value={r.logicalOp}
+                                        onChange={(e) => updateRule(r.id, 'logicalOp', e.target.value)}
+                                        className="w-full h-10 px-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm font-bold text-gray-700"
+                                    >
+                                        <option value="and">AND</option>
+                                        <option value="or">OR</option>
+                                    </select>
+                                ) : (
+                                    <div className="w-full h-10 flex items-center justify-center text-xs font-bold text-gray-400 uppercase tracking-widest">
+                                        
+                                    </div>
+                                )}
+                            </div>
+
                             <select
-                                value={p.matchType || 'contains'}
-                                onChange={(e) => updatePattern(p.id, 'matchType', e.target.value)}
-                                className="h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
+                                value={r.field}
+                                onChange={(e) => updateRule(r.id, 'field', e.target.value)}
+                                className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
+                            >
+                                <option value="any">Any Field</option>
+                                <option value="clip_name">Clip Name</option>
+                                <option value="reel">Reel (Camroll)</option>
+                            </select>
+
+                            <select
+                                value={r.operator}
+                                onChange={(e) => updateRule(r.id, 'operator', e.target.value)}
+                                className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
                             >
                                 <option value="contains">Contains</option>
                                 <option value="not_contains">Does Not Contain</option>
+                                <option value="is">Is</option>
+                                <option value="is_not">Is Not</option>
                             </select>
+
                             <input
                                 type="text"
-                                placeholder="Match String (e.g. A001)"
-                                value={p.matchString}
-                                onChange={(e) => updatePattern(p.id, 'matchString', e.target.value)}
-                                className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black text-sm"
+                                placeholder="Value..."
+                                value={r.value}
+                                onChange={(e) => updateRule(r.id, 'value', e.target.value)}
+                                className="flex-[2] h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black text-sm font-mono"
                             />
-                            <button onClick={() => removePattern(p.id)} className="h-10 w-10 shrink-0 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-md">
+                            
+                            <button onClick={() => removeRule(r.id)} className="h-10 w-10 shrink-0 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-md transition-colors">
                                 <Trash2 size={20} />
                             </button>
                         </div>
                     ))}
-                    <button onClick={addPattern} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md font-medium text-sm transition-colors">
-                        <Plus size={16} /> Add Pattern
+                    <button onClick={addRule} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md font-medium text-sm transition-colors">
+                        <Plus size={16} /> Add Criteria
                     </button>
                 </div>
             </CollapsibleSection>
@@ -2613,76 +2683,87 @@ const DurationFinder = () => {
                         </button>
                     </div>
                     
-                    <div className="p-4">
-                        <h3 className="font-bold text-gray-800 mb-4 uppercase text-xs tracking-wider">Summary Table</h3>
-                        <div className="overflow-x-auto rounded-lg border border-gray-200 mb-8">
-                            <table className="w-full text-left text-sm text-gray-700">
-                                <thead className="bg-gray-100 text-gray-600 font-medium text-xs uppercase tracking-wider">
-                                    <tr>
-                                        <th className="p-3 border-b border-gray-200">Category Name</th>
-                                        <th className="p-3 border-b border-gray-200">Rule</th>
-                                        <th className="p-3 border-b border-gray-200">Match String</th>
-                                        <th className="p-3 border-b border-gray-200">Total Duration</th>
-                                        <th className="p-3 border-b border-gray-200">% of Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100 bg-white">
-                                    {patternStats.map(stat => (
-                                        <tr key={stat.id} className="hover:bg-gray-50 transition-colors">
-                                            <td className="p-3 font-medium">{stat.name}</td>
-                                            <td className="p-3 text-xs text-gray-500 whitespace-nowrap">
-                                                {stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains'}
-                                            </td>
-                                            <td className="p-3 font-mono text-xs">{stat.matchString || '-'}</td>
-                                            <td className="p-3 font-mono font-bold">{framesToTC(stat.pFrames, fps)}</td>
-                                            <td className="p-3">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="w-12 text-right">{stat.percentage.toFixed(2)}%</span>
-                                                    <div className="w-24 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-black" style={{ width: `${stat.percentage}%` }}></div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <h3 className="font-bold text-gray-800 mb-4 uppercase text-xs tracking-wider">Detailed Breakdown</h3>
-                        <div className="space-y-6">
-                            {patternStats.map(stat => stat.pClips.length > 0 && (
-                                <div key={stat.id} className="border border-gray-200 rounded-lg overflow-hidden">
-                                    <div className="bg-gray-100 p-3 font-bold text-gray-800 text-sm">
-                                        {stat.name} <span className="font-normal text-gray-500 ml-1">({stat.matchType === 'not_contains' ? 'Does Not Contain' : 'Contains'} "{stat.matchString}")</span>
-                                    </div>
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-left text-sm text-gray-700">
-                                            <thead className="bg-gray-50 text-gray-500 font-medium text-xs tracking-wider">
+                    <div className="p-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                            <div className="lg:col-span-2">
+                                <h3 className="font-bold text-gray-800 mb-3 uppercase text-xs tracking-wider">Search Criteria</h3>
+                                <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                    <table className="w-full text-left text-sm text-gray-700">
+                                        <thead className="bg-gray-100 text-gray-600 font-medium text-xs uppercase tracking-wider">
+                                            <tr>
+                                                <th className="p-3 border-b border-gray-200 w-16">And/Or</th>
+                                                <th className="p-3 border-b border-gray-200">Criteria</th>
+                                                <th className="p-3 border-b border-gray-200">Operator</th>
+                                                <th className="p-3 border-b border-gray-200">Value</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 bg-white">
+                                            {rules.filter(r => r.value.trim() !== '').length === 0 ? (
                                                 <tr>
-                                                    <th className="p-2 border-b border-gray-200">Camroll (Reel)</th>
-                                                    <th className="p-2 border-b border-gray-200">Clip Name</th>
-                                                    <th className="p-2 border-b border-gray-200">Duration</th>
-                                                    <th className="p-2 border-b border-gray-200">% of Total</th>
+                                                    <td colSpan={4} className="p-4 text-center text-gray-400 italic">No valid criteria defined. Enter values above to filter clips.</td>
                                                 </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100 bg-white font-mono text-xs">
-                                                {stat.pClips.map((clip, i) => {
-                                                    const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
-                                                    return (
-                                                        <tr key={i} className="hover:bg-gray-50">
-                                                            <td className="p-2">{clip.reel || '-'}</td>
-                                                            <td className="p-2 font-sans">{clip.clip_name || '-'}</td>
-                                                            <td className="p-2">{framesToTC(clip.durationFrames, fps)}</td>
-                                                            <td className="p-2">{clipPct.toFixed(2)}%</td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                            ) : rules.filter(r => r.value.trim() !== '').map((r, i) => (
+                                                <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="p-3 font-bold text-gray-500 text-xs">{i > 0 ? r.logicalOp.toUpperCase() : ''}</td>
+                                                    <td className="p-3 font-medium">{r.field === 'any' ? 'Any Field' : r.field === 'clip_name' ? 'Clip Name' : 'Reel'}</td>
+                                                    <td className="p-3 text-xs text-gray-500 whitespace-nowrap">
+                                                        {r.operator.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                                    </td>
+                                                    <td className="p-3 font-mono text-xs">{r.value}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col gap-4">
+                                <h3 className="font-bold text-gray-800 mb-3 uppercase text-xs tracking-wider invisible">Results</h3>
+                                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex flex-col justify-center flex-1">
+                                    <div className="text-xs text-blue-600 uppercase tracking-wider font-bold mb-1">Matched Duration</div>
+                                    <div className="text-2xl font-mono font-bold text-blue-900">{framesToTC(matchFrames, fps)}</div>
+                                    <div className="mt-4 text-xs text-blue-600 uppercase tracking-wider font-bold mb-1">% of Total Program</div>
+                                    <div className="text-lg font-mono font-bold text-blue-900 flex items-center gap-3">
+                                        {matchPercentage.toFixed(2)}%
+                                    </div>
+                                    <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden mt-2">
+                                        <div className="h-full bg-blue-600" style={{ width: `${matchPercentage}%` }}></div>
                                     </div>
                                 </div>
-                            ))}
+                            </div>
+                        </div>
+
+                        <h3 className="font-bold text-gray-800 mb-4 uppercase text-xs tracking-wider">Detailed Breakdown ({matchedClips.length} clips)</h3>
+                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                            <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                                <table className="w-full text-left text-sm text-gray-700 relative">
+                                    <thead className="bg-gray-50 text-gray-500 font-medium text-xs tracking-wider sticky top-0 shadow-sm">
+                                        <tr>
+                                            <th className="p-3 border-b border-gray-200">Camroll (Reel)</th>
+                                            <th className="p-3 border-b border-gray-200">Clip Name</th>
+                                            <th className="p-3 border-b border-gray-200">Duration</th>
+                                            <th className="p-3 border-b border-gray-200">% of Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 bg-white font-mono text-xs">
+                                        {matchedClips.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={4} className="p-8 text-center text-gray-400 italic">No clips match the specified criteria.</td>
+                                            </tr>
+                                        ) : matchedClips.map((clip, i) => {
+                                            const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
+                                            return (
+                                                <tr key={i} className="hover:bg-gray-50">
+                                                    <td className="p-3">{clip.reel || '-'}</td>
+                                                    <td className="p-3 font-sans text-gray-800">{clip.clip_name || '-'}</td>
+                                                    <td className="p-3">{framesToTC(clip.durationFrames, fps)}</td>
+                                                    <td className="p-3">{clipPct.toFixed(2)}%</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
