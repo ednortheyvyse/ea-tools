@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Download,
   Plus,
+  Minus,
   Trash2,
   Copy,
   Check,
@@ -269,13 +270,13 @@ const TimecodeCalculator = () => {
             <div className="flex bg-white rounded-lg p-1 border border-gray-300">
                 <button
                 onClick={() => { setMode("sum"); }}
-                className={`flex-1 py-1 text-sm font-medium rounded-md transition-all ${mode === "sum" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
+                className={`flex-1 py-1 text-sm font-bold rounded-md transition-all ${mode === "sum" ? "bg-black text-white shadow-sm" : "text-gray-600 font-medium hover:bg-gray-100"}`}
                 >
                 Add
                 </button>
                 <button
                 onClick={() => { setMode("diff"); }}
-                className={`flex-1 py-1 text-sm font-medium rounded-md transition-all ${mode === "diff" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
+                className={`flex-1 py-1 text-sm font-bold rounded-md transition-all ${mode === "diff" ? "bg-red-600 text-white shadow-sm" : "text-gray-600 font-medium hover:bg-gray-100"}`}
                 >
                 Subtract
                 </button>
@@ -287,8 +288,12 @@ const TimecodeCalculator = () => {
       <div className="space-y-3">
         {inputs.map((tc, idx) => (
           <div key={idx} className="flex gap-3 group relative">
-            <div className="flex-none w-10 flex items-center justify-center bg-gray-100 text-gray-400 font-mono text-xs rounded-lg border border-gray-200">
-                {idx + 1}
+            <div className={`flex-none w-10 flex items-center justify-center font-mono rounded-lg border transition-colors ${
+                mode === 'diff' && idx > 0 ? 'bg-red-50 text-red-500 border-red-200 text-lg' : 
+                mode === 'sum' && idx > 0 ? 'bg-gray-100 text-gray-500 border-gray-200 text-lg' : 
+                'bg-gray-100 text-gray-400 border-gray-200 text-xs'
+            }`}>
+                {idx === 0 ? "1" : (mode === 'diff' ? "-" : "+")}
             </div>
             <input
               id={`tc-input-${idx}`}
@@ -297,7 +302,7 @@ const TimecodeCalculator = () => {
               onChange={(e) => updateInput(idx, e.target.value)}
               onKeyDown={(e) => handleKeyDown(e, idx)}
               onPaste={(e) => handlePaste(e, idx)}
-              className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-xl font-mono text-center tracking-widest text-gray-900 focus:ring-2 focus:ring-black focus:border-transparent outline-none placeholder:text-gray-200 transition-all shadow-sm"
+              className={`flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-xl font-mono text-center tracking-widest text-gray-900 focus:border-transparent outline-none placeholder:text-gray-200 transition-all shadow-sm focus:ring-2 ${mode === 'diff' ? 'focus:ring-red-600' : 'focus:ring-black'}`}
               placeholder="00:00:00:00"
             />
             {inputs.length > 1 && (
@@ -313,9 +318,13 @@ const TimecodeCalculator = () => {
         <div className="flex gap-4">
           <button
             onClick={() => setInputs([...inputs, ""])}
-            className="flex-1 py-3 border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-black rounded-lg transition-colors flex items-center justify-center gap-2 font-bold text-sm"
+            className={`flex-1 py-3 border-2 border-dashed rounded-lg transition-colors flex items-center justify-center gap-2 font-bold text-sm ${
+              mode === "diff" 
+                ? "border-red-200 text-red-500 hover:border-red-400 hover:text-red-600 hover:bg-red-50" 
+                : "border-gray-300 text-gray-500 hover:border-gray-400 hover:text-black hover:bg-gray-50"
+            }`}
           >
-            <Plus size={16} /> Add Line
+            {mode === "diff" ? <Minus size={16} /> : <Plus size={16} />} {mode === "diff" ? "Subtract Line" : "Add Line"}
           </button>
           <button
             onClick={() => setInputs(["", ""])}
@@ -326,10 +335,10 @@ const TimecodeCalculator = () => {
         </div>
       </div>
 
-      <div className="bg-black text-white p-8 rounded-2xl shadow-xl flex flex-col items-center text-center">
-        <div className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-2">Total Duration</div>
+      <div className={`text-white p-8 rounded-2xl shadow-xl flex flex-col items-center text-center transition-colors duration-300 ${mode === "diff" ? "bg-red-600" : "bg-black"}`}>
+        <div className={`${mode === "diff" ? "text-red-200" : "text-gray-400"} text-xs font-bold uppercase tracking-widest mb-2 transition-colors`}>Total Duration</div>
         <div className="text-5xl sm:text-6xl font-mono font-bold tracking-tighter mb-6 text-white">{result}</div>
-        <CopyButton text={result} label="Copy Result" className="!bg-gray-800 !text-white !border-gray-700 hover:!bg-gray-700" />
+        <CopyButton text={result} label="Copy Result" className={mode === "diff" ? "!bg-red-700 !text-white !border-red-500 hover:!bg-red-800" : "!bg-gray-800 !text-white !border-gray-700 hover:!bg-gray-700"} />
       </div>
     </div>
   );
