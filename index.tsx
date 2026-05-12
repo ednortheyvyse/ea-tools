@@ -65,26 +65,40 @@ const DATA_RATES_MBPS: Record<string, number> = {
 
 const framesToTC = (frames: number, fps: number): string => {
   const roundFps = Math.ceil(fps);
-  const h = Math.floor(frames / (3600 * roundFps));
-  const m = Math.floor((frames % (3600 * roundFps)) / (60 * roundFps));
-  const s = Math.floor(((frames % (3600 * roundFps)) % (60 * roundFps)) / roundFps);
-  const f = Math.floor(((frames % (3600 * roundFps)) % (60 * roundFps)) % roundFps);
+  const isNegative = frames < 0;
+  const absFrames = Math.abs(frames);
+  const h = Math.floor(absFrames / (3600 * roundFps));
+  const m = Math.floor((absFrames % (3600 * roundFps)) / (60 * roundFps));
+  const s = Math.floor(((absFrames % (3600 * roundFps)) % (60 * roundFps)) / roundFps);
+  const f = Math.floor(((absFrames % (3600 * roundFps)) % (60 * roundFps)) % roundFps);
   
   const pad = (n: number) => n.toString().padStart(2, "0");
-  return `${pad(h)}:${pad(m)}:${pad(s)}:${pad(f)}`;
+  return `${isNegative ? '-' : ''}${pad(h)}:${pad(m)}:${pad(s)}:${pad(f)}`;
 };
 
 const tcToFrames = (tc: string, fps: number): number => {
   if (!tc) return 0;
-  const parts = tc.split(/[:;]/).map(Number);
-  if (parts.length !== 4) return 0;
+  let isNegative = false;
+  let cleanTc = tc.trim();
+  if (cleanTc.startsWith('-')) {
+      isNegative = true;
+      cleanTc = cleanTc.substring(1).trim();
+  }
+  let parts: number[];
+  if (/^\d{8}$/.test(cleanTc)) {
+      parts = [cleanTc.slice(0, 2), cleanTc.slice(2, 4), cleanTc.slice(4, 6), cleanTc.slice(6, 8)].map(Number);
+  } else {
+      parts = cleanTc.split(/[:;]/).map(Number);
+  }
+  if (parts.length !== 4 || parts.some(isNaN)) return 0;
   const roundFps = Math.ceil(fps);
-  return (
+  const frames = (
     parts[0] * 3600 * roundFps +
     parts[1] * 60 * roundFps +
     parts[2] * roundFps +
     parts[3]
   );
+  return isNegative ? -frames : frames;
 };
 
 const formatNumber = (num: number, decimals = 2) =>
@@ -162,20 +176,47 @@ const TimecodeCalculator = () => {
 
   useEffect(() => {
     let totalFrames = 0;
-    if (mode === "sum") {
-      totalFrames = inputs.reduce((acc, curr) => acc + tcToFrames(curr, fps), 0);
-    } else {
-      const f1 = tcToFrames(inputs[0], fps);
-      const f2 = tcToFrames(inputs[1], fps);
-      totalFrames = Math.abs(f1 - f2);
+    if (inputs.length > 0) {
+      totalFrames = tcToFrames(inputs[0], fps);
+      for (let i = 1; i < inputs.length; i++) {
+        if (mode === "sum") {
+          totalFrames += tcToFrames(inputs[i], fps);
+        } else {
+          totalFrames -= tcToFrames(inputs[i], fps);
+        }
+      }
     }
     setResult(framesToTC(totalFrames, fps));
   }, [inputs, fps, mode]);
 
   const updateInput = (index: number, val: string) => {
+    let formattedVal = val;
+    const cleanVal = val.trim();
+    if (/^\d{8}$/.test(cleanVal)) {
+        formattedVal = `${cleanVal.slice(0,2)}:${cleanVal.slice(2,4)}:${cleanVal.slice(4,6)}:${cleanVal.slice(6,8)}`;
+    }
     const newInputs = [...inputs];
-    newInputs[index] = val;
+    newInputs[index] = formattedVal;
     setInputs(newInputs);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        if (index < inputs.length - 1) {
+            const nextInput = document.getElementById(`tc-input-${index + 1}`);
+            if (nextInput) nextInput.focus();
+        } else {
+            setInputs(prev => {
+                const newInputs = [...prev, ""];
+                setTimeout(() => {
+                    const nextInput = document.getElementById(`tc-input-${index + 1}`);
+                    if (nextInput) nextInput.focus();
+                }, 10);
+                return newInputs;
+            });
+        }
+    }
   };
 
   const handlePaste = (e: React.ClipboardEvent, index: number) => {
@@ -184,21 +225,12 @@ const TimecodeCalculator = () => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
 
     if (lines.length > 0) {
-        if (mode === "sum") {
-            const newInputs = [...inputs];
-            newInputs[index] = lines[0];
-            if (lines.length > 1) {
-                newInputs.splice(index + 1, 0, ...lines.slice(1));
-            }
-            setInputs(newInputs);
-        } else {
-            const newInputs = [...inputs];
-            newInputs[index] = lines[0];
-            if (lines.length > 1 && index + 1 < newInputs.length) {
-                newInputs[index + 1] = lines[1];
-            }
-            setInputs(newInputs);
+        const newInputs = [...inputs];
+        newInputs[index] = lines[0];
+        if (lines.length > 1) {
+            newInputs.splice(index + 1, 0, ...lines.slice(1));
         }
+        setInputs(newInputs);
     }
   };
 
@@ -236,13 +268,13 @@ const TimecodeCalculator = () => {
             <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wide">Mode</label>
             <div className="flex bg-white rounded-lg p-1 border border-gray-300">
                 <button
-                onClick={() => { setMode("sum"); setInputs(["", ""]); }}
+                onClick={() => { setMode("sum"); }}
                 className={`flex-1 py-1 text-sm font-medium rounded-md transition-all ${mode === "sum" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
                 >
                 Add
                 </button>
                 <button
-                onClick={() => { setMode("diff"); setInputs(["", ""]); }}
+                onClick={() => { setMode("diff"); }}
                 className={`flex-1 py-1 text-sm font-medium rounded-md transition-all ${mode === "diff" ? "bg-black text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
                 >
                 Subtract
@@ -259,14 +291,16 @@ const TimecodeCalculator = () => {
                 {idx + 1}
             </div>
             <input
+              id={`tc-input-${idx}`}
               type="text"
               value={tc}
               onChange={(e) => updateInput(idx, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(e, idx)}
               onPaste={(e) => handlePaste(e, idx)}
               className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-xl font-mono text-center tracking-widest text-gray-900 focus:ring-2 focus:ring-black focus:border-transparent outline-none placeholder:text-gray-200 transition-all shadow-sm"
               placeholder="00:00:00:00"
             />
-            {mode === "sum" && inputs.length > 1 && (
+            {inputs.length > 1 && (
               <button 
                 onClick={() => setInputs(inputs.filter((_, i) => i !== idx))} 
                 className="flex-none w-10 flex items-center justify-center text-gray-400 hover:text-black hover:bg-gray-100 rounded-lg border border-transparent hover:border-gray-200 transition-colors"
@@ -276,14 +310,20 @@ const TimecodeCalculator = () => {
             )}
           </div>
         ))}
-        {mode === "sum" && (
+        <div className="flex gap-4">
           <button
             onClick={() => setInputs([...inputs, ""])}
-            className="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-black rounded-lg transition-colors flex items-center justify-center gap-2 font-bold text-sm"
+            className="flex-1 py-3 border-2 border-dashed border-gray-300 text-gray-500 hover:border-gray-400 hover:text-black rounded-lg transition-colors flex items-center justify-center gap-2 font-bold text-sm"
           >
             <Plus size={16} /> Add Line
           </button>
-        )}
+          <button
+            onClick={() => setInputs(["", ""])}
+            className="flex-none px-6 py-3 border-2 border-dashed border-red-200 text-red-500 hover:border-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors flex items-center justify-center font-bold text-sm"
+          >
+             Clear All
+          </button>
+        </div>
       </div>
 
       <div className="bg-black text-white p-8 rounded-2xl shadow-xl flex flex-col items-center text-center">
