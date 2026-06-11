@@ -27,6 +27,7 @@ import {
   Settings,
   Users,
   UserPlus,
+  Camera,
 } from "lucide-react";
 
 // --- Types & Constants ---
@@ -2793,6 +2794,71 @@ const DurationFinder = () => {
   );
 };
 
+// --- MacDriveSnap ---
+
+const MacDriveSnapInfo = () => {
+    return (
+        <div className="space-y-8 max-w-4xl mx-auto">
+            <div className="bg-gray-50 p-8 rounded-2xl border border-gray-200 text-center">
+                <div className="flex justify-center mb-6">
+                    <div className="p-4 bg-black rounded-2xl text-white shadow-xl">
+                        <Camera size={48} />
+                    </div>
+                </div>
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight mb-4">MacDriveSnap</h2>
+                <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
+                    MacDriveSnap is a native macOS app that creates portable, searchable HTML snapshots of folders and drives without copying the actual files. It is perfect for archiving, reviewing, and searching the contents of large external drives offline.
+                </p>
+                <a 
+                    href="https://github.com/ednortheyvyse/MacDriveSnap" 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 bg-black text-white px-8 py-4 font-bold rounded-xl hover:bg-gray-800 transition-transform active:scale-95 shadow-lg"
+                >
+                    View on GitHub <ChevronRight size={20} />
+                </a>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+                <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+                    <h3 className="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
+                        <Search className="text-gray-500" size={20} /> Searchable HTML
+                    </h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                        Creates standalone HTML files with Finder-style navigation, allowing you to browse and search your drive's structure seamlessly in any web browser.
+                    </p>
+                </div>
+                <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+                    <h3 className="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
+                        <Code2 className="text-gray-500" size={20} /> JSON & SHA-256
+                    </h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                        Export complete JSON manifests for programmatic use. Optionally calculate and store SHA-256 checksums to verify file integrity over time.
+                    </p>
+                </div>
+                <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+                    <h3 className="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
+                        <List className="text-gray-500" size={20} /> Visual Comparisons
+                    </h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                        Visually compare snapshots to see what was added, removed, or modified. Perfect for tracking DIT offloads or VFX turnovers.
+                    </p>
+                </div>
+            </div>
+
+            <div className="bg-blue-50 text-blue-900 p-6 rounded-xl border border-blue-100 flex items-start gap-4">
+                <HardDrive className="flex-none mt-1" size={24} />
+                <div>
+                    <h4 className="font-bold mb-1">Platform Compatibility</h4>
+                    <p className="text-sm">
+                        MacDriveSnap runs <b>locally on macOS</b>. All data processing and checksum calculations happen on your machine, ensuring complete privacy with no external uploads. 
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- MAIN APP ---
 
 const TOOLS: Array<{id: string, title: string, shortTitle?: string, icon: any, desc: string}> = [
@@ -2808,6 +2874,7 @@ const TOOLS: Array<{id: string, title: string, shortTitle?: string, icon: any, d
   { id: "data", title: "Data Rate", icon: HardDrive, desc: "Estimate storage needs for shoots." },
   { id: "guess", title: "Dur. Guess", icon: Hourglass, desc: "How much footage fits on this drive?" },
   { id: "codec", title: "Codec Comparer", icon: Scale, desc: "Compare specifications for legacy and modern codecs." },
+  { id: "macdrive", title: "MacDriveSnap", icon: Camera, desc: "macOS tool for portable drive snapshots." },
 ];
 
 const App = () => {
@@ -2844,6 +2911,7 @@ const App = () => {
       case "data": return <DataRateCalculator />;
       case "guess": return <DurationGuesstimator />;
       case "codec": return <LegacyCodecComparer />;
+      case "macdrive": return <MacDriveSnapInfo />;
       default: return null;
     }
   };
