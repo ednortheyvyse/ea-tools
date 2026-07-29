@@ -2859,6 +2859,71 @@ const MacDriveSnapInfo = () => {
     );
 };
 
+// --- FACT ---
+
+const FactInfo = () => {
+    return (
+        <div className="space-y-8 max-w-4xl mx-auto">
+            <div className="bg-gray-50 p-8 rounded-2xl border border-gray-200 text-center">
+                <div className="flex justify-center mb-6">
+                    <div className="p-4 bg-black rounded-2xl text-white shadow-xl">
+                        <Search size={48} />
+                    </div>
+                </div>
+                <h2 className="text-3xl font-black text-gray-900 tracking-tight mb-4">FACT</h2>
+                <p className="text-lg text-gray-600 max-w-2xl mx-auto mb-8">
+                    FACT is a macOS file search and consolidation tool for production media workflows. Find files from a plain list, review missing or duplicate results, and safely copy selected media to a destination folder.
+                </p>
+                <a
+                    href="https://github.com/ednortheyvyse/FACT"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 bg-black text-white px-8 py-4 font-bold rounded-xl hover:bg-gray-800 transition-transform active:scale-95 shadow-lg"
+                >
+                    View on GitHub <ChevronRight size={20} />
+                </a>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+                <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+                    <h3 className="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
+                        <Search className="text-gray-500" size={20} /> Flexible Search
+                    </h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                        Search folders recursively with exact, partial, case-sensitive, or extension-free filename matching.
+                    </p>
+                </div>
+                <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+                    <h3 className="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
+                        <List className="text-gray-500" size={20} /> Review Results
+                    </h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                        Review found, missing, duplicate, and error results, then choose exactly which files to include.
+                    </p>
+                </div>
+                <div className="bg-white border border-gray-200 p-6 rounded-xl shadow-sm">
+                    <h3 className="font-bold text-gray-900 text-lg mb-3 flex items-center gap-2">
+                        <Copy className="text-gray-500" size={20} /> Safe Consolidation
+                    </h3>
+                    <p className="text-gray-600 text-sm leading-relaxed">
+                        Simulate a dry run before copying, handle filename collisions, and verify copies by size or checksum.
+                    </p>
+                </div>
+            </div>
+
+            <div className="bg-blue-50 text-blue-900 p-6 rounded-xl border border-blue-100 flex items-start gap-4">
+                <HardDrive className="flex-none mt-1" size={24} />
+                <div>
+                    <h4 className="font-bold mb-1">Built for production media</h4>
+                    <p className="text-sm">
+                        FACT runs locally on macOS, does not alter source files, and supports RED <b>.RDC</b> clip folders for <b>.R3D</b> span media.
+                    </p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // --- MAIN APP ---
 
 const TOOLS: Array<{id: string, title: string, shortTitle?: string, icon: any, desc: string}> = [
@@ -2875,6 +2940,7 @@ const TOOLS: Array<{id: string, title: string, shortTitle?: string, icon: any, d
   { id: "guess", title: "Dur. Guess", icon: Hourglass, desc: "How much footage fits on this drive?" },
   { id: "codec", title: "Codec Comparer", icon: Scale, desc: "Compare specifications for legacy and modern codecs." },
   { id: "macdrive", title: "MacDriveSnap", icon: Camera, desc: "macOS tool for portable drive snapshots." },
+  { id: "fact", title: "FACT", icon: Search, desc: "macOS tool for finding and consolidating production media." },
 ];
 
 const App = () => {
@@ -2912,6 +2978,7 @@ const App = () => {
       case "guess": return <DurationGuesstimator />;
       case "codec": return <LegacyCodecComparer />;
       case "macdrive": return <MacDriveSnapInfo />;
+      case "fact": return <FactInfo />;
       default: return null;
     }
   };
