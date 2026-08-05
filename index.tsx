@@ -2362,6 +2362,118 @@ const testOperator = (str: string, op: string, val: string) => {
     }
 };
 
+type DurationRule = {
+    id: string;
+    logicalOp: string;
+    field: string;
+    operator: string;
+    value: string;
+    groupStart: boolean;
+    groupEnd: boolean;
+};
+
+type DurationRuleMatch = {
+    rule: DurationRule;
+    matches: boolean;
+};
+
+type BooleanToken = boolean | 'and' | 'or' | '(' | ')';
+
+const evaluateDurationExpression = (ruleMatches: DurationRuleMatch[]) => {
+    if (ruleMatches.length === 0) return { result: false, error: null as string | null };
+
+    const tokens: BooleanToken[] = [];
+    ruleMatches.forEach(({ rule, matches }, index) => {
+        if (index > 0) tokens.push(rule.logicalOp === 'or' ? 'or' : 'and');
+        if (rule.groupStart) tokens.push('(');
+        tokens.push(matches);
+        if (rule.groupEnd) tokens.push(')');
+    });
+
+    let position = 0;
+
+    try {
+        const parsePrimary = (): boolean => {
+            const token = tokens[position];
+
+            if (typeof token === 'boolean') {
+                position += 1;
+                return token;
+            }
+
+            if (token === '(') {
+                position += 1;
+                const value = parseExpression();
+                if (tokens[position] !== ')') {
+                    throw new Error('Add a closing parenthesis to complete the criteria group.');
+                }
+                position += 1;
+                return value;
+            }
+
+            if (token === ')') {
+                throw new Error('Remove the unmatched closing parenthesis.');
+            }
+
+            throw new Error('A criteria group is missing a condition.');
+        };
+
+        // Preserve the existing left-to-right AND/OR behaviour within each group.
+        const parseExpression = (): boolean => {
+            let value = parsePrimary();
+
+            while (position < tokens.length && tokens[position] !== ')') {
+                const logicalOp = tokens[position];
+                if (logicalOp !== 'and' && logicalOp !== 'or') {
+                    throw new Error('Add AND or OR between criteria groups.');
+                }
+                position += 1;
+                const nextValue = parsePrimary();
+                value = logicalOp === 'and' ? value && nextValue : value || nextValue;
+            }
+
+            return value;
+        };
+
+        const result = parseExpression();
+        if (position !== tokens.length) {
+            throw new Error('Remove the unmatched closing parenthesis.');
+        }
+
+        return { result, error: null as string | null };
+    } catch (error) {
+        return {
+            result: false,
+            error: error instanceof Error ? error.message : 'The criteria grouping is invalid.',
+        };
+    }
+};
+
+const formatDurationRuleValue = (rule: DurationRule) => {
+    const value = rule.value.trim();
+
+    switch (rule.operator) {
+        case 'contains': return `*${value}*`;
+        case 'not_contains': return `NOT *${value}*`;
+        case 'is': return `"${value}"`;
+        case 'is_not': return `NOT "${value}"`;
+        default: return value;
+    }
+};
+
+const formatDurationExpression = (rules: DurationRule[]) => {
+    const parts: string[] = [];
+
+    rules.forEach((rule, index) => {
+        if (index > 0) parts.push(rule.logicalOp === 'or' ? 'OR' : 'AND');
+        if (rule.groupStart) parts.push('(');
+        parts.push(formatDurationRuleValue(rule));
+        if (rule.groupEnd) parts.push(')');
+    });
+
+    return parts.join(' ');
+};
+
 const DurationFinder = () => {
   const [edlData, setEdlData] = useState<any[]>([]);
   const [dragActive, setDragActive] = useState(false);
@@ -2374,18 +2486,29 @@ const DurationFinder = () => {
     return 24;
   });
 
-  const [rules, setRules] = useState<{ id: string, logicalOp: string, field: string, operator: string, value: string }[]>(() => {
+  const [rules, setRules] = useState<DurationRule[]>(() => {
     try { 
         const saved = localStorage.getItem('ea_durationFinder'); 
-        if (saved && JSON.parse(saved).rules) {
-            return JSON.parse(saved).rules;
-        } else if (saved && JSON.parse(saved).patterns) {
-            return JSON.parse(saved).patterns.map((p: any, i: number) => ({ 
+        const parsed = saved ? JSON.parse(saved) : null;
+        if (Array.isArray(parsed?.rules)) {
+            return parsed.rules.map((rule: any, index: number) => ({
+                id: rule.id || crypto.randomUUID(),
+                logicalOp: index === 0 ? 'and' : rule.logicalOp === 'or' ? 'or' : 'and',
+                field: rule.field || 'any',
+                operator: rule.operator || 'contains',
+                value: rule.value || '',
+                groupStart: Boolean(rule.groupStart),
+                groupEnd: Boolean(rule.groupEnd),
+            }));
+        } else if (Array.isArray(parsed?.patterns)) {
+            return parsed.patterns.map((p: any, i: number) => ({
                 id: p.id || crypto.randomUUID(), 
                 logicalOp: i === 0 ? 'and' : 'or', 
                 field: 'any', 
                 operator: p.matchType || 'contains', 
-                value: p.matchString || '' 
+                value: p.matchString || '',
+                groupStart: false,
+                groupEnd: false,
             }));
         }
     } catch (e) {}
@@ -2397,11 +2520,19 @@ const DurationFinder = () => {
   }, [fps, rules]);
 
   const addRule = () => {
-    setRules([...rules, { id: crypto.randomUUID(), logicalOp: 'and', field: 'any', operator: 'contains', value: "" }]);
+    setRules([...rules, {
+        id: crypto.randomUUID(),
+        logicalOp: 'and',
+        field: 'any',
+        operator: 'contains',
+        value: '',
+        groupStart: false,
+        groupEnd: false,
+    }]);
   };
 
-  const updateRule = (id: string, field: string, value: string) => {
-    setRules(rules.map(r => r.id === id ? { ...r, [field]: value } : r));
+  const updateRule = (id: string, changes: Partial<DurationRule>) => {
+    setRules(rules.map(r => r.id === id ? { ...r, ...changes } : r));
   };
 
   const removeRule = (id: string) => {
@@ -2477,6 +2608,12 @@ const DurationFinder = () => {
     }
   };
 
+  const validRules = rules.filter(r => r.value.trim() !== '');
+  const criteriaExpression = formatDurationExpression(validRules);
+  const criteriaError = evaluateDurationExpression(
+      validRules.map(rule => ({ rule, matches: false }))
+  ).error;
+
   // Calculations
   const calculateResults = () => {
       let totalFrames = 0;
@@ -2489,15 +2626,9 @@ const DurationFinder = () => {
       let matchFrames = 0;
       const matchedClips: any[] = [];
 
-      if (rules.length > 0 && rules.some(r => r.value.trim() !== '')) {
+      if (validRules.length > 0 && !criteriaError) {
           for (const clip of edlData) {
-              let isMatch = false;
-              let hasEvaluatedFirst = false;
-
-              for (let i = 0; i < rules.length; i++) {
-                  const r = rules[i];
-                  if (!r.value.trim()) continue;
-
+              const ruleMatches = validRules.map(r => {
                   const lowerVal = r.value.toLowerCase();
                   const reelStr = (clip.reel || "").toLowerCase();
                   const nameStr = (clip.clip_name || "").toLowerCase();
@@ -2511,17 +2642,9 @@ const DurationFinder = () => {
                       fieldMatch = testOperator(nameStr, r.operator, lowerVal);
                   }
 
-                  if (!hasEvaluatedFirst) {
-                      isMatch = fieldMatch;
-                      hasEvaluatedFirst = true;
-                  } else {
-                      if (r.logicalOp === 'and') {
-                          isMatch = isMatch && fieldMatch;
-                      } else {
-                          isMatch = isMatch || fieldMatch;
-                      }
-                  }
-              }
+                  return { rule: r, matches: fieldMatch };
+              });
+              const isMatch = evaluateDurationExpression(ruleMatches).result;
 
               if (isMatch) {
                   const dur = tcToFrames(clip.rec_out, fps) - tcToFrames(clip.rec_in, fps);
@@ -2547,15 +2670,14 @@ const DurationFinder = () => {
     rows.push(["Timeline FPS", fps]);
     rows.push([]);
     rows.push(["Search Criteria"]);
-    rows.push(["And/Or", "Criteria", "Operator", "Value"]);
+    rows.push(["And/Or", "Open", "Criteria", "Operator", "Value", "Close"]);
     
-    const validRules = rules.filter(r => r.value.trim() !== '');
     for (let i = 0; i < validRules.length; i++) {
         const r = validRules[i];
         const logic = i === 0 ? '' : r.logicalOp.toUpperCase();
         const fieldStr = r.field === 'any' ? 'Any Field' : r.field === 'clip_name' ? 'Clip Name' : 'Reel';
         const opStr = r.operator.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
-        rows.push([logic, fieldStr, opStr, r.value]);
+        rows.push([logic, r.groupStart ? '(' : '', fieldStr, opStr, r.value, r.groupEnd ? ')' : '']);
     }
     
     rows.push([]);
@@ -2597,7 +2719,7 @@ const DurationFinder = () => {
                                 {i > 0 ? (
                                     <select
                                         value={r.logicalOp}
-                                        onChange={(e) => updateRule(r.id, 'logicalOp', e.target.value)}
+                                        onChange={(e) => updateRule(r.id, { logicalOp: e.target.value })}
                                         className="w-full h-10 px-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm font-bold text-gray-700"
                                     >
                                         <option value="and">AND</option>
@@ -2610,9 +2732,19 @@ const DurationFinder = () => {
                                 )}
                             </div>
 
+                            <button
+                                type="button"
+                                aria-pressed={r.groupStart}
+                                title="Start a criteria group before this row"
+                                onClick={() => updateRule(r.id, { groupStart: !r.groupStart })}
+                                className={`h-10 w-10 shrink-0 rounded-md border font-mono text-lg font-bold transition-colors ${r.groupStart ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                (
+                            </button>
+
                             <select
                                 value={r.field}
-                                onChange={(e) => updateRule(r.id, 'field', e.target.value)}
+                                onChange={(e) => updateRule(r.id, { field: e.target.value })}
                                 className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
                             >
                                 <option value="any">Any Field</option>
@@ -2622,7 +2754,7 @@ const DurationFinder = () => {
 
                             <select
                                 value={r.operator}
-                                onChange={(e) => updateRule(r.id, 'operator', e.target.value)}
+                                onChange={(e) => updateRule(r.id, { operator: e.target.value })}
                                 className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
                             >
                                 <option value="contains">Contains</option>
@@ -2635,9 +2767,19 @@ const DurationFinder = () => {
                                 type="text"
                                 placeholder="Value..."
                                 value={r.value}
-                                onChange={(e) => updateRule(r.id, 'value', e.target.value)}
+                                onChange={(e) => updateRule(r.id, { value: e.target.value })}
                                 className="flex-[2] h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black text-sm font-mono"
                             />
+
+                            <button
+                                type="button"
+                                aria-pressed={r.groupEnd}
+                                title="End a criteria group after this row"
+                                onClick={() => updateRule(r.id, { groupEnd: !r.groupEnd })}
+                                className={`h-10 w-10 shrink-0 rounded-md border font-mono text-lg font-bold transition-colors ${r.groupEnd ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-100'}`}
+                            >
+                                )
+                            </button>
                             
                             <button onClick={() => removeRule(r.id)} className="h-10 w-10 shrink-0 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-md transition-colors">
                                 <Trash2 size={20} />
@@ -2647,6 +2789,20 @@ const DurationFinder = () => {
                     <button onClick={addRule} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md font-medium text-sm transition-colors">
                         <Plus size={16} /> Add Criteria
                     </button>
+                    <p className="text-xs text-gray-500">
+                        Use the ( and ) buttons to group criteria, for example: A AND (B OR C).
+                    </p>
+                    <div className="rounded-lg border border-gray-200 bg-white p-3" aria-live="polite">
+                        <div className="mb-1 text-xs font-bold uppercase tracking-wider text-gray-500">Search expression</div>
+                        <code className={`block break-words text-sm ${criteriaExpression ? 'text-gray-900' : 'italic text-gray-400'}`}>
+                            {criteriaExpression || 'Add criteria to build the search expression.'}
+                        </code>
+                    </div>
+                    {criteriaError && (
+                        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
+                            Invalid criteria grouping: {criteriaError}
+                        </div>
+                    )}
                 </div>
             </CollapsibleSection>
 
@@ -2714,24 +2870,28 @@ const DurationFinder = () => {
                                         <thead className="bg-gray-100 text-gray-600 font-medium text-xs uppercase tracking-wider">
                                             <tr>
                                                 <th className="p-3 border-b border-gray-200 w-16">And/Or</th>
+                                                <th className="p-3 border-b border-gray-200 w-12 text-center">Open</th>
                                                 <th className="p-3 border-b border-gray-200">Criteria</th>
                                                 <th className="p-3 border-b border-gray-200">Operator</th>
                                                 <th className="p-3 border-b border-gray-200">Value</th>
+                                                <th className="p-3 border-b border-gray-200 w-12 text-center">Close</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100 bg-white">
                                             {rules.filter(r => r.value.trim() !== '').length === 0 ? (
                                                 <tr>
-                                                    <td colSpan={4} className="p-4 text-center text-gray-400 italic">No valid criteria defined. Enter values above to filter clips.</td>
+                                                    <td colSpan={6} className="p-4 text-center text-gray-400 italic">No valid criteria defined. Enter values above to filter clips.</td>
                                                 </tr>
                                             ) : rules.filter(r => r.value.trim() !== '').map((r, i) => (
                                                 <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                                                     <td className="p-3 font-bold text-gray-500 text-xs">{i > 0 ? r.logicalOp.toUpperCase() : ''}</td>
+                                                    <td className="p-3 text-center font-mono font-bold">{r.groupStart ? '(' : ''}</td>
                                                     <td className="p-3 font-medium">{r.field === 'any' ? 'Any Field' : r.field === 'clip_name' ? 'Clip Name' : 'Reel'}</td>
                                                     <td className="p-3 text-xs text-gray-500 whitespace-nowrap">
                                                         {r.operator.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                                                     </td>
                                                     <td className="p-3 font-mono text-xs">{r.value}</td>
+                                                    <td className="p-3 text-center font-mono font-bold">{r.groupEnd ? ')' : ''}</td>
                                                 </tr>
                                             ))}
                                         </tbody>

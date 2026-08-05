@@ -6,6 +6,7 @@ services:
       dockerfile: ./Dockerfile
     environment:
       NODE_ENV: development
+      VITE_API_PROXY_TARGET: http://backend:5001
     ports:
       - 3000:3000
       - 9229:9229
