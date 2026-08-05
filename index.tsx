@@ -30,6 +30,8 @@ import {
   Camera,
   CircleHelp,
   AlertTriangle,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 
 // --- Types & Constants ---
@@ -2381,6 +2383,13 @@ type DurationRuleMatch = {
     matches: boolean;
 };
 
+type DurationSortKey = 'reel' | 'clip_name' | 'duration' | 'percentage';
+
+type DurationSort = {
+    key: DurationSortKey;
+    direction: 'asc' | 'desc';
+};
+
 type BooleanToken = boolean | 'and' | 'or' | '(' | ')';
 
 const getDurationOperatorLabel = (operator: string) => {
@@ -2524,6 +2533,7 @@ const DurationFinder = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [breakdownSort, setBreakdownSort] = useState<DurationSort | null>(null);
 
   const [fps, setFps] = useState<number>(() => {
     try { const saved = localStorage.getItem('ea_durationFinder'); if (saved) return JSON.parse(saved).fps ?? 24; } catch (e) {}
@@ -2548,7 +2558,7 @@ const DurationFinder = () => {
             return parsed.patterns.map((p: any, i: number) => ({
                 id: p.id || crypto.randomUUID(), 
                 logicalOp: i === 0 ? 'and' : 'or', 
-                field: 'any', 
+                field: 'reel',
                 operator: p.matchType || 'contains', 
                 value: p.matchString || '',
                 groupStart: false,
@@ -2567,7 +2577,7 @@ const DurationFinder = () => {
     setRules([...rules, {
         id: crypto.randomUUID(),
         logicalOp: 'and',
-        field: 'any',
+        field: 'reel',
         operator: 'contains',
         value: '',
         groupStart: false,
@@ -2678,25 +2688,29 @@ const DurationFinder = () => {
       let matchFrames = 0;
       const matchedClips: any[] = [];
 
-      if (validRules.length > 0 && !criteriaError) {
+      if (!criteriaError) {
           for (const clip of edlData) {
-              const ruleMatches = validRules.map(r => {
-                  const lowerVal = r.value.toLowerCase();
-                  const reelStr = (clip.reel || "").toLowerCase();
-                  const nameStr = (clip.clip_name || "").toLowerCase();
-                  
-                  let fieldMatch = false;
-                  if (r.field === 'any') {
-                      fieldMatch = testOperator(reelStr, r.operator, lowerVal) || testOperator(nameStr, r.operator, lowerVal);
-                  } else if (r.field === 'reel') {
-                      fieldMatch = testOperator(reelStr, r.operator, lowerVal);
-                  } else if (r.field === 'clip_name') {
-                      fieldMatch = testOperator(nameStr, r.operator, lowerVal);
-                  }
+              let isMatch = validRules.length === 0;
 
-                  return { rule: r, matches: fieldMatch };
-              });
-              const isMatch = evaluateDurationExpression(ruleMatches).result;
+              if (validRules.length > 0) {
+                  const ruleMatches = validRules.map(r => {
+                      const lowerVal = r.value.toLowerCase();
+                      const reelStr = (clip.reel || "").toLowerCase();
+                      const nameStr = (clip.clip_name || "").toLowerCase();
+
+                      let fieldMatch = false;
+                      if (r.field === 'any') {
+                          fieldMatch = testOperator(reelStr, r.operator, lowerVal) || testOperator(nameStr, r.operator, lowerVal);
+                      } else if (r.field === 'reel') {
+                          fieldMatch = testOperator(reelStr, r.operator, lowerVal);
+                      } else if (r.field === 'clip_name') {
+                          fieldMatch = testOperator(nameStr, r.operator, lowerVal);
+                      }
+
+                      return { rule: r, matches: fieldMatch };
+                  });
+                  isMatch = evaluateDurationExpression(ruleMatches).result;
+              }
 
               if (isMatch) {
                   const dur = tcToFrames(clip.rec_out, fps) - tcToFrames(clip.rec_in, fps);
@@ -2712,6 +2726,34 @@ const DurationFinder = () => {
   };
 
   const { totalFrames, matchFrames, matchedClips, matchPercentage } = calculateResults();
+
+  const updateBreakdownSort = (key: DurationSortKey) => {
+      setBreakdownSort(current => (
+          current?.key === key
+              ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+              : { key, direction: 'asc' }
+      ));
+  };
+
+  const sortedMatchedClips = breakdownSort
+      ? matchedClips
+          .map((clip, originalIndex) => ({ clip, originalIndex }))
+          .sort((a, b) => {
+              let comparison = 0;
+
+              if (breakdownSort.key === 'reel') {
+                  comparison = (a.clip.reel || '').localeCompare(b.clip.reel || '', undefined, { numeric: true, sensitivity: 'base' });
+              } else if (breakdownSort.key === 'clip_name') {
+                  comparison = (a.clip.clip_name || '').localeCompare(b.clip.clip_name || '', undefined, { numeric: true, sensitivity: 'base' });
+              } else {
+                  comparison = a.clip.durationFrames - b.clip.durationFrames;
+              }
+
+              if (comparison === 0) return a.originalIndex - b.originalIndex;
+              return breakdownSort.direction === 'asc' ? comparison : -comparison;
+          })
+          .map(({ clip }) => clip)
+      : matchedClips;
   
   const handleDownloadCSV = () => {
     if (edlData.length === 0) return;
@@ -2812,9 +2854,9 @@ const DurationFinder = () => {
                                 onChange={(e) => updateRule(r.id, { field: e.target.value })}
                                 className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
                             >
-                                <option value="any">Reel or Clip Name</option>
-                                <option value="clip_name">Clip Name</option>
                                 <option value="reel">Reel (Camroll)</option>
+                                <option value="clip_name">Clip Name</option>
+                                <option value="any">Reel or Clip Name</option>
                             </select>
 
                             <select
@@ -3001,10 +3043,62 @@ const DurationFinder = () => {
                                 <table className="w-full text-left text-sm text-gray-700 relative">
                                     <thead className="bg-gray-50 text-gray-500 font-medium text-xs tracking-wider sticky top-0 shadow-sm">
                                         <tr>
-                                            <th className="p-3 border-b border-gray-200">Camroll (Reel)</th>
-                                            <th className="p-3 border-b border-gray-200">Clip Name</th>
-                                            <th className="p-3 border-b border-gray-200">Duration</th>
-                                            <th className="min-w-[220px] p-3 border-b border-gray-200">% of Total</th>
+                                            <th
+                                                className="p-3 border-b border-gray-200"
+                                                aria-sort={breakdownSort?.key === 'reel' ? (breakdownSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateBreakdownSort('reel')}
+                                                    className="flex items-center gap-1.5 font-medium hover:text-black"
+                                                    title="Sort by Camroll"
+                                                >
+                                                    Camroll (Reel)
+                                                    {breakdownSort?.key === 'reel' && (breakdownSort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
+                                                </button>
+                                            </th>
+                                            <th
+                                                className="p-3 border-b border-gray-200"
+                                                aria-sort={breakdownSort?.key === 'clip_name' ? (breakdownSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateBreakdownSort('clip_name')}
+                                                    className="flex items-center gap-1.5 font-medium hover:text-black"
+                                                    title="Sort by Clip Name"
+                                                >
+                                                    Clip Name
+                                                    {breakdownSort?.key === 'clip_name' && (breakdownSort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
+                                                </button>
+                                            </th>
+                                            <th
+                                                className="p-3 border-b border-gray-200"
+                                                aria-sort={breakdownSort?.key === 'duration' ? (breakdownSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateBreakdownSort('duration')}
+                                                    className="flex items-center gap-1.5 font-medium hover:text-black"
+                                                    title="Sort by Duration"
+                                                >
+                                                    Duration
+                                                    {breakdownSort?.key === 'duration' && (breakdownSort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
+                                                </button>
+                                            </th>
+                                            <th
+                                                className="min-w-[220px] p-3 border-b border-gray-200"
+                                                aria-sort={breakdownSort?.key === 'percentage' ? (breakdownSort.direction === 'asc' ? 'ascending' : 'descending') : 'none'}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() => updateBreakdownSort('percentage')}
+                                                    className="flex items-center gap-1.5 font-medium hover:text-black"
+                                                    title="Sort by Percentage of Total"
+                                                >
+                                                    % of Total
+                                                    {breakdownSort?.key === 'percentage' && (breakdownSort.direction === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />)}
+                                                </button>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 bg-white font-mono text-xs">
@@ -3012,7 +3106,7 @@ const DurationFinder = () => {
                                             <tr>
                                                 <td colSpan={4} className="p-8 text-center text-gray-400 italic">No clips match the specified criteria.</td>
                                             </tr>
-                                        ) : matchedClips.map((clip, i) => {
+                                        ) : sortedMatchedClips.map((clip, i) => {
                                             const clipPct = totalFrames > 0 ? (clip.durationFrames / totalFrames) * 100 : 0;
                                             return (
                                                 <tr key={i} className="hover:bg-gray-50">
