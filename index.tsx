@@ -28,6 +28,8 @@ import {
   Users,
   UserPlus,
   Camera,
+  CircleHelp,
+  AlertTriangle,
 } from "lucide-react";
 
 // --- Types & Constants ---
@@ -2379,6 +2381,16 @@ type DurationRuleMatch = {
 
 type BooleanToken = boolean | 'and' | 'or' | '(' | ')';
 
+const getDurationOperatorLabel = (operator: string) => {
+    switch (operator) {
+        case 'contains': return 'Contains';
+        case 'not_contains': return 'Does Not Contain';
+        case 'is': return 'Exactly Matches';
+        case 'is_not': return 'Does Not Exactly Match';
+        default: return operator;
+    }
+};
+
 const evaluateDurationExpression = (ruleMatches: DurationRuleMatch[]) => {
     if (ruleMatches.length === 0) return { result: false, error: null as string | null };
 
@@ -2405,14 +2417,14 @@ const evaluateDurationExpression = (ruleMatches: DurationRuleMatch[]) => {
                 position += 1;
                 const value = parseExpression();
                 if (tokens[position] !== ')') {
-                    throw new Error('Add a closing parenthesis to complete the criteria group.');
+                    throw new Error('Add a closing bracket ) to complete the group.');
                 }
                 position += 1;
                 return value;
             }
 
             if (token === ')') {
-                throw new Error('Remove the unmatched closing parenthesis.');
+                throw new Error('Remove the unmatched ) or add an opening bracket ( before it.');
             }
 
             throw new Error('A criteria group is missing a condition.');
@@ -2437,7 +2449,7 @@ const evaluateDurationExpression = (ruleMatches: DurationRuleMatch[]) => {
 
         const result = parseExpression();
         if (position !== tokens.length) {
-            throw new Error('Remove the unmatched closing parenthesis.');
+            throw new Error('Remove the unmatched ) or add an opening bracket ( before it.');
         }
 
         return { result, error: null as string | null };
@@ -2451,13 +2463,18 @@ const evaluateDurationExpression = (ruleMatches: DurationRuleMatch[]) => {
 
 const formatDurationRuleValue = (rule: DurationRule) => {
     const value = rule.value.trim();
+    const field = rule.field === 'reel'
+        ? 'the reel name'
+        : rule.field === 'clip_name'
+            ? 'the clip name'
+            : 'the reel or clip name';
 
     switch (rule.operator) {
-        case 'contains': return `*${value}*`;
-        case 'not_contains': return `NOT *${value}*`;
-        case 'is': return `"${value}"`;
-        case 'is_not': return `NOT "${value}"`;
-        default: return value;
+        case 'contains': return `${field} contains “${value}”`;
+        case 'not_contains': return `${field} does not contain “${value}”`;
+        case 'is': return `${field} exactly matches “${value}”`;
+        case 'is_not': return `${field} does not exactly match “${value}”`;
+        default: return `${field} matches “${value}”`;
     }
 };
 
@@ -2471,7 +2488,7 @@ const formatDurationExpression = (rules: DurationRule[]) => {
         if (rule.groupEnd) parts.push(')');
     });
 
-    return parts.join(' ');
+    return parts.join(' ').replace(/\(\s/g, '(').replace(/\s\)/g, ')');
 };
 
 const DurationFinder = () => {
@@ -2610,6 +2627,12 @@ const DurationFinder = () => {
 
   const validRules = rules.filter(r => r.value.trim() !== '');
   const criteriaExpression = formatDurationExpression(validRules);
+  const hasNegativeOrWarning = validRules.some((rule, index) => (
+      index > 0
+      && rule.logicalOp === 'or'
+      && rule.operator === 'not_contains'
+      && validRules[index - 1].operator === 'not_contains'
+  ));
   const criteriaError = evaluateDurationExpression(
       validRules.map(rule => ({ rule, matches: false }))
   ).error;
@@ -2670,13 +2693,14 @@ const DurationFinder = () => {
     rows.push(["Timeline FPS", fps]);
     rows.push([]);
     rows.push(["Search Criteria"]);
-    rows.push(["And/Or", "Open", "Criteria", "Operator", "Value", "Close"]);
+    rows.push(["What will match", criteriaExpression || "No criteria entered"]);
+    rows.push(["Join", "Start group", "Search in", "Match", "Text", "End group"]);
     
     for (let i = 0; i < validRules.length; i++) {
         const r = validRules[i];
         const logic = i === 0 ? '' : r.logicalOp.toUpperCase();
-        const fieldStr = r.field === 'any' ? 'Any Field' : r.field === 'clip_name' ? 'Clip Name' : 'Reel';
-        const opStr = r.operator.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        const fieldStr = r.field === 'any' ? 'Reel or Clip Name' : r.field === 'clip_name' ? 'Clip Name' : 'Reel';
+        const opStr = getDurationOperatorLabel(r.operator);
         rows.push([logic, r.groupStart ? '(' : '', fieldStr, opStr, r.value, r.groupEnd ? ')' : '']);
     }
     
@@ -2711,8 +2735,17 @@ const DurationFinder = () => {
 
   return (
     <div className="space-y-6 w-full h-full">
-        <CollapsibleSection title={<><Search size={20} /> Manage Search Criteria</>} defaultOpen={true}>
+        <CollapsibleSection title={<><Search size={20} /> Choose What to Match</>} defaultOpen={true}>
                 <div className="p-4 space-y-4">
+                    <div className="flex gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                        <CircleHelp size={18} className="mt-0.5 shrink-0" />
+                        <div>
+                            <div className="font-bold">How rows work</div>
+                            <p className="mt-0.5 text-blue-800">
+                                AND narrows the results because both rows must match. OR broadens the results because either row can match.
+                            </p>
+                        </div>
+                    </div>
                     {rules.map((r, i) => (
                         <div key={r.id} className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
                             <div className="w-20 shrink-0">
@@ -2721,6 +2754,7 @@ const DurationFinder = () => {
                                         value={r.logicalOp}
                                         onChange={(e) => updateRule(r.id, { logicalOp: e.target.value })}
                                         className="w-full h-10 px-2 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm font-bold text-gray-700"
+                                        aria-label="How this row combines with the previous row"
                                     >
                                         <option value="and">AND</option>
                                         <option value="or">OR</option>
@@ -2736,8 +2770,9 @@ const DurationFinder = () => {
                                 type="button"
                                 aria-pressed={r.groupStart}
                                 title="Start a criteria group before this row"
+                                aria-label="Start a group before this row"
                                 onClick={() => updateRule(r.id, { groupStart: !r.groupStart })}
-                                className={`h-10 w-10 shrink-0 rounded-md border font-mono text-lg font-bold transition-colors ${r.groupStart ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-100'}`}
+                                className={`h-10 w-10 shrink-0 rounded-md border font-mono text-lg font-bold transition-colors ${r.groupStart ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100'}`}
                             >
                                 (
                             </button>
@@ -2747,7 +2782,7 @@ const DurationFinder = () => {
                                 onChange={(e) => updateRule(r.id, { field: e.target.value })}
                                 className="flex-1 h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black bg-white text-sm"
                             >
-                                <option value="any">Any Field</option>
+                                <option value="any">Reel or Clip Name</option>
                                 <option value="clip_name">Clip Name</option>
                                 <option value="reel">Reel (Camroll)</option>
                             </select>
@@ -2759,13 +2794,13 @@ const DurationFinder = () => {
                             >
                                 <option value="contains">Contains</option>
                                 <option value="not_contains">Does Not Contain</option>
-                                <option value="is">Is</option>
-                                <option value="is_not">Is Not</option>
+                                <option value="is">Exactly Matches</option>
+                                <option value="is_not">Does Not Exactly Match</option>
                             </select>
 
                             <input
                                 type="text"
-                                placeholder="Value..."
+                                placeholder="Text to find..."
                                 value={r.value}
                                 onChange={(e) => updateRule(r.id, { value: e.target.value })}
                                 className="flex-[2] h-10 px-3 border border-gray-300 rounded-md outline-none focus:ring-2 focus:ring-black text-sm font-mono"
@@ -2775,8 +2810,9 @@ const DurationFinder = () => {
                                 type="button"
                                 aria-pressed={r.groupEnd}
                                 title="End a criteria group after this row"
+                                aria-label="End a group after this row"
                                 onClick={() => updateRule(r.id, { groupEnd: !r.groupEnd })}
-                                className={`h-10 w-10 shrink-0 rounded-md border font-mono text-lg font-bold transition-colors ${r.groupEnd ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-gray-500 hover:bg-gray-100'}`}
+                                className={`h-10 w-10 shrink-0 rounded-md border font-mono text-lg font-bold transition-colors ${r.groupEnd ? 'border-black bg-black text-white' : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-100'}`}
                             >
                                 )
                             </button>
@@ -2787,20 +2823,34 @@ const DurationFinder = () => {
                         </div>
                     ))}
                     <button onClick={addRule} className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md font-medium text-sm transition-colors">
-                        <Plus size={16} /> Add Criteria
+                        <Plus size={16} /> Add Search Row
                     </button>
                     <p className="text-xs text-gray-500">
-                        Use the ( and ) buttons to group criteria, for example: A AND (B OR C).
+                        The ( and ) buttons keep related choices together—for example, something that must match plus either of two alternatives.
                     </p>
-                    <div className="rounded-lg border border-gray-200 bg-white p-3" aria-live="polite">
-                        <div className="mb-1 text-xs font-bold uppercase tracking-wider text-gray-500">Search expression</div>
-                        <code className={`block break-words text-sm ${criteriaExpression ? 'text-gray-900' : 'italic text-gray-400'}`}>
-                            {criteriaExpression || 'Add criteria to build the search expression.'}
-                        </code>
+                    <div className="rounded-lg border border-gray-200 bg-white p-4" aria-live="polite">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                            <div className="text-xs font-bold uppercase tracking-wider text-gray-500">Search expression</div>
+                            {criteriaExpression && <CopyButton text={criteriaExpression} label="Copy expression" />}
+                        </div>
+                        <p className={`select-text break-words rounded-md bg-gray-50 p-3 text-sm leading-relaxed ${criteriaExpression ? 'cursor-text text-gray-900' : 'italic text-gray-400'}`}>
+                            {criteriaExpression || 'Add a row to build the search expression.'}
+                        </p>
                     </div>
+                    {hasNegativeOrWarning && (
+                        <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                            <AlertTriangle size={18} className="mt-0.5 shrink-0" />
+                            <div>
+                                <div className="font-bold">Trying to exclude both values?</div>
+                                <p className="mt-0.5">
+                                    Use AND between “Does Not Contain” rows. OR can let a value through whenever it is absent from just one of the rows.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                     {criteriaError && (
                         <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
-                            Invalid criteria grouping: {criteriaError}
+                            Please check the ( and ) buttons: {criteriaError}
                         </div>
                     )}
                 </div>
@@ -2847,14 +2897,34 @@ const DurationFinder = () => {
 
             {edlData.length > 0 && !loading && (
                 <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-300">
-                    <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                        <div>
-                            <div className="text-xl font-black font-serif uppercase tracking-tight text-gray-900">
-                                Total Program Duration: <span className="text-black">{framesToTC(totalFrames, fps)}</span>
-                            </div>
+                    <div className="flex flex-wrap items-center gap-4 border-b border-gray-200 bg-gray-50 p-4">
+                        <div className="mr-auto min-w-[240px]">
+                            <div className="text-xs font-bold uppercase tracking-wider text-gray-500">Total Program Duration</div>
+                            <div className="mt-1 text-xl font-mono font-bold text-gray-900">{framesToTC(totalFrames, fps)}</div>
                             {fileName && (
                                 <div className="text-sm text-gray-500 font-medium mt-1">Source: {fileName}</div>
                             )}
+                        </div>
+                        <div className="border-l border-gray-300 px-4">
+                            <div className="text-xs font-bold uppercase tracking-wider text-blue-600">Matched Duration</div>
+                            <div className="mt-1 text-xl font-mono font-bold text-blue-900">{framesToTC(matchFrames, fps)}</div>
+                        </div>
+                        <div className="min-w-[190px] border-l border-gray-300 px-4">
+                            <div className="text-xs font-bold uppercase tracking-wider text-blue-600">% of Total Program</div>
+                            <div className="mt-1 text-xl font-mono font-bold text-blue-900">{matchPercentage.toFixed(2)}%</div>
+                            <div
+                                className="mt-2 h-2 w-full overflow-hidden rounded-full bg-blue-200"
+                                role="img"
+                                aria-label={`${matchPercentage.toFixed(2)}% of the total program matched`}
+                            >
+                                <div
+                                    className="h-full rounded-full bg-blue-600"
+                                    style={{
+                                        width: `${Math.min(100, Math.max(0, matchPercentage))}%`,
+                                        minWidth: matchPercentage > 0 ? '3px' : '0',
+                                    }}
+                                />
+                            </div>
                         </div>
                         <button onClick={handleDownloadCSV} className="flex items-center gap-2 bg-black hover:bg-gray-800 text-white px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-sm active:scale-95">
                             <Download size={16} /> Download CSV
@@ -2862,59 +2932,6 @@ const DurationFinder = () => {
                     </div>
                     
                     <div className="p-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                            <div className="lg:col-span-2">
-                                <h3 className="font-bold text-gray-800 mb-3 uppercase text-xs tracking-wider">Search Criteria</h3>
-                                <div className="overflow-x-auto rounded-lg border border-gray-200">
-                                    <table className="w-full text-left text-sm text-gray-700">
-                                        <thead className="bg-gray-100 text-gray-600 font-medium text-xs uppercase tracking-wider">
-                                            <tr>
-                                                <th className="p-3 border-b border-gray-200 w-16">And/Or</th>
-                                                <th className="p-3 border-b border-gray-200 w-12 text-center">Open</th>
-                                                <th className="p-3 border-b border-gray-200">Criteria</th>
-                                                <th className="p-3 border-b border-gray-200">Operator</th>
-                                                <th className="p-3 border-b border-gray-200">Value</th>
-                                                <th className="p-3 border-b border-gray-200 w-12 text-center">Close</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-100 bg-white">
-                                            {rules.filter(r => r.value.trim() !== '').length === 0 ? (
-                                                <tr>
-                                                    <td colSpan={6} className="p-4 text-center text-gray-400 italic">No valid criteria defined. Enter values above to filter clips.</td>
-                                                </tr>
-                                            ) : rules.filter(r => r.value.trim() !== '').map((r, i) => (
-                                                <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                                                    <td className="p-3 font-bold text-gray-500 text-xs">{i > 0 ? r.logicalOp.toUpperCase() : ''}</td>
-                                                    <td className="p-3 text-center font-mono font-bold">{r.groupStart ? '(' : ''}</td>
-                                                    <td className="p-3 font-medium">{r.field === 'any' ? 'Any Field' : r.field === 'clip_name' ? 'Clip Name' : 'Reel'}</td>
-                                                    <td className="p-3 text-xs text-gray-500 whitespace-nowrap">
-                                                        {r.operator.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                                    </td>
-                                                    <td className="p-3 font-mono text-xs">{r.value}</td>
-                                                    <td className="p-3 text-center font-mono font-bold">{r.groupEnd ? ')' : ''}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            
-                            <div className="flex flex-col gap-4">
-                                <h3 className="font-bold text-gray-800 mb-3 uppercase text-xs tracking-wider invisible">Results</h3>
-                                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex flex-col justify-center flex-1">
-                                    <div className="text-xs text-blue-600 uppercase tracking-wider font-bold mb-1">Matched Duration</div>
-                                    <div className="text-2xl font-mono font-bold text-blue-900">{framesToTC(matchFrames, fps)}</div>
-                                    <div className="mt-4 text-xs text-blue-600 uppercase tracking-wider font-bold mb-1">% of Total Program</div>
-                                    <div className="text-lg font-mono font-bold text-blue-900 flex items-center gap-3">
-                                        {matchPercentage.toFixed(2)}%
-                                    </div>
-                                    <div className="w-full h-1.5 bg-blue-200 rounded-full overflow-hidden mt-2">
-                                        <div className="h-full bg-blue-600" style={{ width: `${matchPercentage}%` }}></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
                         <h3 className="font-bold text-gray-800 mb-4 uppercase text-xs tracking-wider">Detailed Breakdown ({matchedClips.length} clips)</h3>
                         <div className="border border-gray-200 rounded-lg overflow-hidden">
                             <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -2924,7 +2941,7 @@ const DurationFinder = () => {
                                             <th className="p-3 border-b border-gray-200">Camroll (Reel)</th>
                                             <th className="p-3 border-b border-gray-200">Clip Name</th>
                                             <th className="p-3 border-b border-gray-200">Duration</th>
-                                            <th className="p-3 border-b border-gray-200">% of Total</th>
+                                            <th className="min-w-[220px] p-3 border-b border-gray-200">% of Total</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 bg-white font-mono text-xs">
@@ -2939,7 +2956,24 @@ const DurationFinder = () => {
                                                     <td className="p-3">{clip.reel || '-'}</td>
                                                     <td className="p-3 font-sans text-gray-800">{clip.clip_name || '-'}</td>
                                                     <td className="p-3">{framesToTC(clip.durationFrames, fps)}</td>
-                                                    <td className="p-3">{clipPct.toFixed(2)}%</td>
+                                                    <td className="min-w-[220px] p-3">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="w-14 shrink-0 text-right">{clipPct.toFixed(2)}%</span>
+                                                            <div
+                                                                className="h-2 flex-1 overflow-hidden rounded-full bg-blue-100"
+                                                                role="img"
+                                                                aria-label={`${clipPct.toFixed(2)}% of the total program`}
+                                                            >
+                                                                <div
+                                                                    className="h-full rounded-full bg-blue-500"
+                                                                    style={{
+                                                                        width: `${Math.min(100, Math.max(0, clipPct))}%`,
+                                                                        minWidth: clipPct > 0 ? '3px' : '0',
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                             );
                                         })}
