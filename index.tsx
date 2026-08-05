@@ -117,9 +117,10 @@ interface CopyButtonProps {
     text: string;
     label?: string;
     className?: string;
+    title?: string;
 }
 
-const CopyButton: React.FC<CopyButtonProps> = ({ text, label, className }) => {
+const CopyButton: React.FC<CopyButtonProps> = ({ text, label, className, title = "Copy to clipboard" }) => {
     const [copied, setCopied] = useState(false);
 
     const handleCopy = (e: React.MouseEvent) => {
@@ -137,7 +138,8 @@ const CopyButton: React.FC<CopyButtonProps> = ({ text, label, className }) => {
                     ? "bg-black text-white border-black" 
                     : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
             } ${className}`}
-            title="Copy to clipboard"
+            title={title}
+            aria-label={title}
         >
             {copied ? <Check size={14} /> : <Copy size={14} />}
             {label && <span>{copied ? "Copied" : label}</span>}
@@ -2462,7 +2464,7 @@ const evaluateDurationExpression = (ruleMatches: DurationRuleMatch[]) => {
 };
 
 const formatDurationRuleValue = (rule: DurationRule) => {
-    const value = rule.value.trim();
+    const value = rule.value;
     const field = rule.field === 'reel'
         ? 'the reel name'
         : rule.field === 'clip_name'
@@ -2489,6 +2491,31 @@ const formatDurationExpression = (rules: DurationRule[]) => {
     });
 
     return parts.join(' ').replace(/\(\s/g, '(').replace(/\s\)/g, ')');
+};
+
+type TechnicalExpressionPart = {
+    kind: 'boolean' | 'bracket' | 'field' | 'operator' | 'value';
+    text: string;
+};
+
+const buildTechnicalDurationExpression = (rules: DurationRule[]) => {
+    const parts: TechnicalExpressionPart[] = [];
+
+    rules.forEach((rule, index) => {
+        const field = rule.field === 'reel' ? 'Reel' : rule.field === 'clip_name' ? 'Clip Name' : 'All';
+        const isContains = rule.operator === 'contains' || rule.operator === 'not_contains';
+        const isNegative = rule.operator === 'not_contains' || rule.operator === 'is_not';
+        const value = isContains ? `*${rule.value}*` : `"${rule.value}"`;
+
+        if (index > 0) parts.push({ kind: 'boolean', text: rule.logicalOp === 'or' ? 'OR' : 'AND' });
+        if (rule.groupStart) parts.push({ kind: 'bracket', text: '(' });
+        parts.push({ kind: 'field', text: field });
+        if (isNegative) parts.push({ kind: 'operator', text: 'NOT' });
+        parts.push({ kind: 'value', text: value });
+        if (rule.groupEnd) parts.push({ kind: 'bracket', text: ')' });
+    });
+
+    return parts;
 };
 
 const DurationFinder = () => {
@@ -2627,6 +2654,8 @@ const DurationFinder = () => {
 
   const validRules = rules.filter(r => r.value.trim() !== '');
   const criteriaExpression = formatDurationExpression(validRules);
+  const technicalCriteriaParts = buildTechnicalDurationExpression(validRules);
+  const technicalCriteriaExpression = technicalCriteriaParts.map(part => part.text).join(' ');
   const hasNegativeOrWarning = validRules.some((rule, index) => (
       index > 0
       && rule.logicalOp === 'or'
@@ -2694,6 +2723,7 @@ const DurationFinder = () => {
     rows.push([]);
     rows.push(["Search Criteria"]);
     rows.push(["What will match", criteriaExpression || "No criteria entered"]);
+    rows.push(["Technical expression", technicalCriteriaExpression || "No criteria entered"]);
     rows.push(["Join", "Start group", "Search in", "Match", "Text", "End group"]);
     
     for (let i = 0; i < validRules.length; i++) {
@@ -2829,13 +2859,46 @@ const DurationFinder = () => {
                         The ( and ) buttons keep related choices together—for example, something that must match plus either of two alternatives.
                     </p>
                     <div className="rounded-lg border border-gray-200 bg-white p-4" aria-live="polite">
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                            <div className="text-xs font-bold uppercase tracking-wider text-gray-500">Search expression</div>
-                            {criteriaExpression && <CopyButton text={criteriaExpression} label="Copy expression" />}
+                        <div className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">Search expression</div>
+                        <div className="space-y-3 rounded-md bg-gray-50 p-3">
+                            <div>
+                                <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Plain English</div>
+                                <div className="flex items-start gap-3">
+                                    <p className={`min-w-0 flex-1 select-text break-words text-sm leading-relaxed ${criteriaExpression ? 'cursor-text text-gray-900' : 'italic text-gray-400'}`}>
+                                        {criteriaExpression || 'Add a row to build the search expression.'}
+                                    </p>
+                                    {criteriaExpression && (
+                                        <CopyButton
+                                            text={criteriaExpression}
+                                            title="Copy plain-English expression"
+                                            className="shrink-0 !px-2"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                            {technicalCriteriaExpression && (
+                                <div className="border-t border-gray-200 pt-3">
+                                    <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">Technical</div>
+                                    <div className="flex items-start gap-3">
+                                        <code className="block min-w-0 flex-1 select-text break-words text-sm leading-relaxed text-gray-800">
+                                            {technicalCriteriaParts.map((part, index) => (
+                                                <React.Fragment key={`${part.kind}-${index}`}>
+                                                    {index > 0 && ' '}
+                                                    <span className={part.kind === 'boolean' ? 'font-bold' : part.kind === 'field' ? 'italic' : undefined}>
+                                                        {part.text}
+                                                    </span>
+                                                </React.Fragment>
+                                            ))}
+                                        </code>
+                                        <CopyButton
+                                            text={technicalCriteriaExpression}
+                                            title="Copy technical expression"
+                                            className="shrink-0 !px-2"
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        <p className={`select-text break-words rounded-md bg-gray-50 p-3 text-sm leading-relaxed ${criteriaExpression ? 'cursor-text text-gray-900' : 'italic text-gray-400'}`}>
-                            {criteriaExpression || 'Add a row to build the search expression.'}
-                        </p>
                     </div>
                     {hasNegativeOrWarning && (
                         <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
